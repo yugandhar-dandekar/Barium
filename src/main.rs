@@ -4,9 +4,7 @@ mod token;
 fn main() {
     let mut lexer = lexer::Lexer::new(b"Test");
 
-    lexer.advance_by(4).expect("Failed to advance");
+    let character = lexer.peek_and_advance().expect("Failed to peek");
 
-    let character = lexer.peek().expect("Failed to peek");
-
-    println!("{}", character as char)
+    println!("{} {}", character as char, lexer.current)
 }

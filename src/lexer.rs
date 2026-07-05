@@ -74,4 +74,16 @@ impl<'a> Lexer<'a> {
 
         Ok(())
     }
+
+    pub fn advance(&mut self) -> Result<(), Error> {
+        self.advance_by(1)
+    }
+
+    pub fn peek_and_advance(&mut self) -> Result<u8, Error> {
+        let character = self.peek()?; // return the error if failed to peek
+
+        self.advance()?; // return the error if failed to advance
+
+        Ok(character) // return the character
+    }
 }

@@ -31,4 +31,24 @@ impl<'a> Lexer<'a> {
             line: 1,
         }
     }
+
+    pub fn index_is_at_end(&self, index: usize) -> bool {
+        index >= self.source_len
+    }
+
+    pub fn is_at_end(&self) -> bool {
+        self.index_is_at_end(self.current)
+    }
+
+    pub fn peek_index(&self, index: usize) -> Result<u8, ()> {
+        if !self.index_is_at_end(index) {
+            Ok(self.source[index])
+        } else {
+            Err(())
+        }
+    }
+
+    pub fn peek(&self) -> Result<u8, ()> {
+        self.peek_index(self.current)
+    }
 }

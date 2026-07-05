@@ -2,6 +2,12 @@
 
 use crate::token::{self, Token};
 
+#[derive(Debug)]
+pub enum Error {
+    FailedToPeek,
+    FailedToAdvance,
+}
+
 pub struct Lexer<'a> {
     // source will be a list of u8 characters
     pub source: &'a [u8],
@@ -40,19 +46,32 @@ impl<'a> Lexer<'a> {
         self.index_is_at_end(self.current)
     }
 
-    pub fn peek_index(&self, index: usize) -> Result<u8, ()> {
+    pub fn peek_index(&self, index: usize) -> Result<u8, Error> {
         if !self.index_is_at_end(index) {
             Ok(self.source[index])
         } else {
-            Err(())
+            Err(Error::FailedToPeek)
         }
     }
 
-    pub fn peek(&self) -> Result<u8, ()> {
+    pub fn peek(&self) -> Result<u8, Error> {
         self.peek_index(self.current)
     }
 
-    pub fn peek_next(&self) -> Result<u8, ()> {
+    pub fn peek_next(&self) -> Result<u8, Error> {
         self.peek_index(self.current + 1)
+    }
+
+    pub fn advance_by(&mut self, value: usize) -> Result<(), Error> {
+        let new_index = self.current + value;
+
+        // allow advancing to the end
+        if self.index_is_at_end(new_index) && new_index != self.source_len {
+            return Err(Error::FailedToAdvance);
+        }
+
+        self.current = new_index;
+
+        Ok(())
     }
 }

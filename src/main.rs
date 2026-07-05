@@ -2,9 +2,11 @@ mod lexer;
 mod token;
 
 fn main() {
-    let lexer = lexer::Lexer::new(b"Test");
+    let mut lexer = lexer::Lexer::new(b"Test");
 
-    let character = lexer.peek_next().expect("Failed to peek");
+    lexer.advance_by(4).expect("Failed to advance");
+
+    let character = lexer.peek().expect("Failed to peek");
 
     println!("{}", character as char)
 }

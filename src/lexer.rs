@@ -6,6 +6,7 @@ use crate::token::{self, Token};
 pub enum Error {
     FailedToPeek,
     FailedToAdvance,
+    FailedToIndexSource,
 }
 
 pub struct Lexer<'a> {
@@ -85,5 +86,15 @@ impl<'a> Lexer<'a> {
         self.advance()?; // return the error if failed to advance
 
         Ok(character) // return the character
+    }
+
+    pub fn get_source_slice(&self, start: usize, end: usize) -> Result<&[u8], Error> {
+        // start must not be greater than end
+        // end is not inclusive so it can be equal to 'source_len'
+        if start > end || end > self.source_len {
+            return Err(Error::FailedToIndexSource);
+        }
+
+        Ok(&self.source[start..end])
     }
 }

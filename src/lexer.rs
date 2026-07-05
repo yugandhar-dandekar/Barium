@@ -51,4 +51,8 @@ impl<'a> Lexer<'a> {
     pub fn peek(&self) -> Result<u8, ()> {
         self.peek_index(self.current)
     }
+
+    pub fn peek_next(&self) -> Result<u8, ()> {
+        self.peek_index(self.current + 1)
+    }
 }

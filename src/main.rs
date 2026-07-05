@@ -4,5 +4,7 @@ mod token;
 fn main() {
     let lexer = lexer::Lexer::new(b"Test");
 
-    println!("{}", String::from_utf8_lossy(lexer.source))
+    let character = lexer.peek().expect("Failed to peek");
+
+    println!("{}", character as char)
 }

@@ -88,13 +88,14 @@ impl<'a> Lexer<'a> {
         Ok(character) // return the character
     }
 
+    /// start is inclusive, end is not inclusive
     pub fn get_source_slice(&self, start: usize, end: usize) -> Result<&[u8], Error> {
         // start must not be greater than end
         // end is not inclusive so it can be equal to 'source_len'
         if start > end || end > self.source_len {
-            return Err(Error::FailedToIndexSource);
+            Err(Error::FailedToIndexSource)
+        } else {
+            Ok(&self.source[start..end])
         }
-
-        Ok(&self.source[start..end])
     }
 }

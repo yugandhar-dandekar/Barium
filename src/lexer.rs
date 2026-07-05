@@ -17,3 +17,18 @@ pub struct Lexer<'a> {
     // to find what line a token is on
     pub line: usize,
 }
+
+impl<'a> Lexer<'a> {
+    pub fn new(source: &'a [u8]) -> Self {
+        Self {
+            source: source,
+            tokens: Vec::new(),
+
+            source_len: source.len(),
+
+            start: 0,
+            current: 0,
+            line: 1,
+        }
+    }
+}

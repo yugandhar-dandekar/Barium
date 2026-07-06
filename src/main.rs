@@ -1,12 +1,20 @@
-use std::str;
+use std::fs;
 
 mod lexer;
 mod token;
 
 fn main() {
-    let lexer = lexer::Lexer::new(b"Test");
+    let contents: String = fs::read_to_string(".ignore/test").expect("Failed to read file");
+    let mut lexer = lexer::Lexer::new(&contents.as_bytes());
 
-    let characters = lexer.get_source_slice(2, 4);
+    let tokens = lexer.lex_text().unwrap();
 
-    println!("{}", str::from_utf8(characters.unwrap()).unwrap())
+    for token in tokens {
+        match token.token_type {
+            // token::TokenTypes::Whitespace | token::TokenTypes::EndOfFile => {}
+            _ => {
+                println!("{:?}", token);
+            }
+        }
+    }
 }

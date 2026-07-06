@@ -319,12 +319,14 @@ impl<'a> Lexer<'a> {
             self.advance()?;
         }
 
+        // if the advance has ended because of an EOF throw an error
         if self.is_at_end() {
             return Err(Error::UnexpectedEOF);
         }
 
         self.advance()?;
 
+        // only get the characters in between the double quotes
         let lexeme = self
             .reference_array_to_box_str(self.get_source_slice(self.start + 1, self.current - 1)?)
             .expect("Failed to convert lexeme into Box<str>");

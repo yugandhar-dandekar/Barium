@@ -297,6 +297,7 @@ impl Lexer {
                     {
                         self.advance()?;
                     }
+                    self.add_token_automatically(token::TokenTypes::Identifier)?;
                 } else if character.is_ascii_digit() {
                     self.handle_number_literal()?;
                 } else {
@@ -322,6 +323,7 @@ impl Lexer {
             return Err(Error::UnexpectedEOF);
         }
 
+        // go past the ending double quote as it has been processed
         self.advance()?;
 
         // only get the characters in between the double quotes

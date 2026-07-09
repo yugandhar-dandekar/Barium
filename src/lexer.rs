@@ -15,9 +15,6 @@ pub struct Lexer {
     pub source: Vec<u8>,
     pub tokens: Vec<Token>,
 
-    // fixed length of source
-    pub source_len: usize,
-
     // used for string slices
     pub start: usize,
     pub current: usize,
@@ -29,13 +26,9 @@ pub struct Lexer {
 impl Lexer {
     #[allow(dead_code)]
     pub fn new(source: Vec<u8>) -> Self {
-        let source_len = source.len();
-
         Self {
             source: source,
             tokens: Vec::new(),
-
-            source_len: source_len,
 
             start: 0, // this will point to the start of each token, the length is 'current' - 'start'
             current: 0, // this will always point to the next character being lexed
@@ -54,7 +47,7 @@ impl Lexer {
         //   past the end of the characters, for example, if we had the word
         //   'test' the 4th character won't be at the end because the character
         //   still hasn't been processed
-        index >= self.source_len
+        index >= self.source.len()
     }
 
     pub fn is_at_end(&self) -> bool {
@@ -77,7 +70,7 @@ impl Lexer {
         let new_index = self.current + value;
 
         // allow advancing to the end
-        if self.index_is_at_end(new_index) && new_index != self.source_len {
+        if self.index_is_at_end(new_index) && new_index != self.source.len() {
             return Err(Error::FailedToAdvance);
         }
 

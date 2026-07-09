@@ -309,7 +309,11 @@ impl Lexer {
     }
 
     pub fn handle_string_literal(&mut self) -> Result<(), Error> {
-        while self.peek() == Some(b'"') {
+        while self.peek() != Some(b'"') && !self.is_at_end() {
+            if self.peek() == Some(b'\n') {
+                self.line += 1;
+            }
+
             self.advance()?;
         }
 

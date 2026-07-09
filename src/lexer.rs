@@ -7,7 +7,7 @@ pub enum Error {
     FailedToAdvance,
     FailedToIndexSource,
     UnexpectedEOF,
-    InvalidUTF8,
+    InvalidUtf8,
 }
 
 pub struct Lexer {
@@ -62,7 +62,7 @@ impl Lexer {
     }
 
     pub fn peek_index(&self, index: usize) -> Option<u8> {
-        self.source.get(index).copied()
+        self.source.get(index).copied() // &u8 to u8
     }
 
     pub fn peek(&self) -> Option<u8> {
@@ -99,14 +99,15 @@ impl Lexer {
     }
 
     /// start is inclusive, end is not inclusive
-    pub fn get_source_slice(&self, start: usize, end: usize) -> Result<&[u8], Error> {
-        // start must not be greater than end
-        // end is not inclusive so it can be equal to 'source_len'
-        if start > end || end > self.source_len {
-            Err(Error::FailedToIndexSource)
-        } else {
-            Ok(&self.source[start..end])
-        }
+    fn get_source_string(&self, start: usize, end: usize) -> Result<Box<str>, Error> {
+        let slice = self
+            .source
+            .get(start..end) // get the range of values
+            .ok_or(Error::FailedToIndexSource)?; // if an error occurs return error and break flow
+
+        std::str::from_utf8(slice)
+            .map(|s| s.into()) // if Ok, convert it into Box<str>
+            .map_err(|_| Error::InvalidUtf8) // if Err, it will become InvalidUtf8::InvalidUtf8
     }
 
     /// add token with parameters set manually
@@ -129,9 +130,7 @@ impl Lexer {
     pub fn add_token_automatically(&mut self, token_type: token::TokenTypes) -> Result<(), Error> {
         let line = self.line;
 
-        let lexeme = self
-            .reference_array_to_box_str(self.get_source_slice(self.start, self.current)?)
-            .map_err(|_| Error::InvalidUTF8)?;
+        let lexeme = self.get_source_string(self.start, self.current)?;
 
         let token = Token {
             token_type,
@@ -152,13 +151,6 @@ impl Lexer {
         } else {
             Ok(false)
         }
-    }
-
-    /// converts &[u8] to Box<str>
-    pub fn reference_array_to_box_str(&self, u8_array: &[u8]) -> Result<Box<str>, ()> {
-        let box_str: Box<str> = str::from_utf8(u8_array).map_err(|_| ())?.into();
-
-        Ok(box_str)
     }
 
     /// scans a token, if any action fails, it will return with an error that can be
@@ -307,6 +299,7 @@ impl Lexer {
                 if character.is_ascii_alphabetic() || character == b'_' {
                     while self
                         .peek()
+                        // checks if c exists and c is a alphanumeric or _
                         .is_some_and(|c| c.is_ascii_alphanumeric() || c == b'_')
                     {
                         self.advance()?;
@@ -335,9 +328,7 @@ impl Lexer {
         self.advance()?;
 
         // only get the characters in between the double quotes
-        let lexeme = self
-            .reference_array_to_box_str(self.get_source_slice(self.start + 1, self.current - 1)?)
-            .map_err(|_| Error::InvalidUTF8)?;
+        let lexeme = self.get_source_string(self.start + 1, self.current - 1)?;
 
         self.add_token_manually(token::TokenTypes::CharString, lexeme, self.line);
 

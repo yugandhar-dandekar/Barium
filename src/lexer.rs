@@ -4,7 +4,6 @@ use std::path::Path;
 
 #[derive(Debug)]
 pub enum Error {
-    FailedToPeek,
     FailedToAdvance,
     FailedToIndexSource,
     UnexpectedEOF,
@@ -46,10 +45,15 @@ impl Lexer {
 
     #[allow(dead_code)]
     pub fn from_file(path: &Path) -> std::io::Result<Self> {
+        // if unsuccessful, break flow and return the error
         Ok(Self::new(fs::read(path)?))
     }
 
     pub fn index_is_at_end(&self, index: usize) -> bool {
+        // index is at the end when the current character being processed is
+        //   past the end of the characters, for example, if we had the word
+        //   'test' the 4th character won't be at the end because the character
+        //   still hasn't been processed
         index >= self.source_len
     }
 
@@ -57,19 +61,15 @@ impl Lexer {
         self.index_is_at_end(self.current)
     }
 
-    pub fn peek_index(&self, index: usize) -> Result<u8, Error> {
-        if !self.index_is_at_end(index) {
-            Ok(self.source[index])
-        } else {
-            Err(Error::FailedToPeek)
-        }
+    pub fn peek_index(&self, index: usize) -> Option<u8> {
+        self.source.get(index).copied()
     }
 
-    pub fn peek(&self) -> Result<u8, Error> {
+    pub fn peek(&self) -> Option<u8> {
         self.peek_index(self.current)
     }
 
-    pub fn peek_next(&self) -> Result<u8, Error> {
+    pub fn peek_next(&self) -> Option<u8> {
         self.peek_index(self.current + 1)
     }
 
@@ -91,11 +91,11 @@ impl Lexer {
     }
 
     pub fn peek_and_advance(&mut self) -> Result<u8, Error> {
-        let character = self.peek()?; // return the error if failed to peek
+        let character = self.peek().ok_or(Error::UnexpectedEOF); // return the error if failed to peek
 
         self.advance()?; // return the error if failed to advance
 
-        Ok(character) // return the character
+        character // return the character
     }
 
     /// start is inclusive, end is not inclusive
@@ -146,7 +146,7 @@ impl Lexer {
 
     /// only advance if the next character == expected
     pub fn advance_if_match(&mut self, expected: u8) -> Result<bool, Error> {
-        if self.peek()? == expected {
+        if self.peek() == Some(expected) {
             self.advance()?;
             Ok(true)
         } else {
@@ -287,7 +287,7 @@ impl Lexer {
             b'\r' => {} // do nothing for carriage return
 
             b'\t' => {
-                while !self.is_at_end() && self.peek()? == b'\t' {
+                while self.peek() == Some(b'\t') {
                     self.advance()?;
                 }
 
@@ -295,7 +295,7 @@ impl Lexer {
             }
 
             b' ' => {
-                while !self.is_at_end() && self.peek()? == b' ' {
+                while self.peek() == Some(b' ') {
                     self.advance()?;
                 }
 
@@ -305,17 +305,16 @@ impl Lexer {
             b'"' => self.handle_string_literal()?,
             _ => {
                 if character.is_ascii_alphabetic() || character == b'_' {
-                    while !self.is_at_end()
-                        && (self.peek()?.is_ascii_alphanumeric() || self.peek()? == b'_')
+                    while self
+                        .peek()
+                        .is_some_and(|c| c.is_ascii_alphanumeric() || c == b'_')
                     {
                         self.advance()?;
                     }
-
-                    self.add_token_automatically(token::TokenTypes::Identifier)?
                 } else if character.is_ascii_digit() {
                     self.handle_number_literal()?;
                 } else {
-                    self.add_token_automatically(token::TokenTypes::Unknown)?
+                    self.add_token_automatically(token::TokenTypes::Unknown)?;
                 }
             }
         }
@@ -324,7 +323,7 @@ impl Lexer {
     }
 
     pub fn handle_string_literal(&mut self) -> Result<(), Error> {
-        while !self.is_at_end() && self.peek()? != b'"' {
+        while self.peek() == Some(b'"') {
             self.advance()?;
         }
 
@@ -338,7 +337,7 @@ impl Lexer {
         // only get the characters in between the double quotes
         let lexeme = self
             .reference_array_to_box_str(self.get_source_slice(self.start + 1, self.current - 1)?)
-            .expect("Failed to convert lexeme into Box<str>");
+            .map_err(|_| Error::InvalidUTF8)?;
 
         self.add_token_manually(token::TokenTypes::CharString, lexeme, self.line);
 
@@ -346,18 +345,18 @@ impl Lexer {
     }
 
     pub fn handle_number_literal(&mut self) -> Result<(), Error> {
-        while !self.is_at_end() && self.peek()?.is_ascii_digit() {
+        while self.peek().is_some_and(|c| c.is_ascii_digit()) {
             self.advance()?;
         }
 
         if !self.is_at_end()
-            && self.peek()? == b'.'
+            && self.peek() == Some(b'.')
             && self.peek_next().map_or(false, |c| c.is_ascii_digit())
         {
             // skip the dot
             self.advance()?;
 
-            while !self.is_at_end() && self.peek()?.is_ascii_digit() {
+            while self.peek().is_some_and(|c| c.is_ascii_digit()) {
                 self.advance()?;
             }
 

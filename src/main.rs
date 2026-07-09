@@ -24,7 +24,7 @@ fn main() {
     match tokens {
         Ok(tokens) => print_tokens(tokens),
         Err(err) => {
-            eprint!("{:?}", err)
+            eprintln!("{:?}", err)
         }
     }
 }

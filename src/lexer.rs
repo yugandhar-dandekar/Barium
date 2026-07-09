@@ -1,4 +1,6 @@
 use crate::token::{self, Token};
+use std::fs;
+use std::path::Path;
 
 #[derive(Debug)]
 pub enum Error {
@@ -6,11 +8,12 @@ pub enum Error {
     FailedToAdvance,
     FailedToIndexSource,
     UnexpectedEOF,
+    InvalidUTF8,
 }
 
-pub struct Lexer<'a> {
+pub struct Lexer {
     // source will be a list of u8 characters
-    pub source: &'a [u8],
+    pub source: Vec<u8>,
     pub tokens: Vec<Token>,
 
     // fixed length of source
@@ -24,18 +27,26 @@ pub struct Lexer<'a> {
     pub line: usize,
 }
 
-impl<'a> Lexer<'a> {
-    pub fn new(source: &'a [u8]) -> Self {
+impl Lexer {
+    #[allow(dead_code)]
+    pub fn new(source: Vec<u8>) -> Self {
+        let source_len = source.len();
+
         Self {
             source: source,
             tokens: Vec::new(),
 
-            source_len: source.len(),
+            source_len: source_len,
 
             start: 0, // this will point to the start of each token, the length is 'current' - 'start'
             current: 0, // this will always point to the next character being lexed
             line: 1,
         }
+    }
+
+    #[allow(dead_code)]
+    pub fn from_file(path: &Path) -> std::io::Result<Self> {
+        Ok(Self::new(fs::read(path)?))
     }
 
     pub fn index_is_at_end(&self, index: usize) -> bool {
@@ -120,7 +131,7 @@ impl<'a> Lexer<'a> {
 
         let lexeme = self
             .reference_array_to_box_str(self.get_source_slice(self.start, self.current)?)
-            .expect("Failed to convert lexeme into Box<str>");
+            .map_err(|_| Error::InvalidUTF8)?;
 
         let token = Token {
             token_type,

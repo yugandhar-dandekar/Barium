@@ -91,11 +91,11 @@ impl Lexer {
     }
 
     pub fn peek_and_advance(&mut self) -> Result<u8, Error> {
-        let character = self.peek().ok_or(Error::UnexpectedEOF); // return the error if failed to peek
+        let character = self.peek().ok_or(Error::UnexpectedEOF)?; // return the error if failed to peek
 
         self.advance()?; // return the error if failed to advance
 
-        character // return the character
+        Ok(character) // return the character
     }
 
     /// start is inclusive, end is not inclusive

@@ -7,7 +7,6 @@ pub enum Error {
     FailedToAdvance,
     FailedToIndexSource,
     UnexpectedEOF,
-    InvalidUtf8,
 }
 
 pub struct Lexer {

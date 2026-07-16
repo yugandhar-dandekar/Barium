@@ -96,16 +96,13 @@ impl Lexer {
         Ok(character) // return the character
     }
 
-    /// start is inclusive, end is not inclusive
-    fn get_source_string(&self, start: usize, end: usize) -> Result<Box<str>, Error> {
+    fn get_source_string(&self, start: usize, end: usize) -> Option<Box<str>> {
         let slice = self
             .source
-            .get(start..end) // get the range of values
-            .ok_or(Error::FailedToIndexSource)?; // if an error occurs return error and break flow
+            .get(start..end)
+            .map_or(None, |s| std::str::from_utf8(s).ok())?;
 
-        std::str::from_utf8(slice)
-            .map(|s| s.into()) // if Ok, convert it into Box<str>
-            .map_err(|_| Error::InvalidUtf8) // if Err, it will become InvalidUtf8::InvalidUtf8
+        Some(slice.into())
     }
 
     /// add token with parameters set manually
@@ -128,7 +125,9 @@ impl Lexer {
     pub fn add_token_automatically(&mut self, token_type: token::TokenTypes) -> Result<(), Error> {
         let line = self.line;
 
-        let lexeme = self.get_source_string(self.start, self.current)?;
+        let lexeme = self
+            .get_source_string(self.start, self.current)
+            .ok_or(Error::FailedToIndexSource)?;
 
         let token = Token {
             token_type,
@@ -332,7 +331,9 @@ impl Lexer {
         self.advance()?;
 
         // only get the characters in between the double quotes
-        let lexeme = self.get_source_string(self.start + 1, self.current - 1)?;
+        let lexeme = self
+            .get_source_string(self.start + 1, self.current - 1)
+            .ok_or(Error::FailedToIndexSource)?;
 
         self.add_token_manually(token::TokenTypes::CharString, lexeme, self.line);
 

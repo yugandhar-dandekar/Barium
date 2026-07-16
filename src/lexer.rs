@@ -83,7 +83,13 @@ impl Lexer {
     }
 
     pub fn peek_and_advance(&mut self) -> Result<u8, Error> {
-        let character = self.peek().ok_or(Error::UnexpectedEOF)?; // return the error if failed to peek
+        let character = self.peek().ok_or({
+            if self.is_at_end() {
+                Error::UnexpectedEOF // if the code has already reached the end
+            } else {
+                Error::FailedToIndexSource // if the code fails to peek
+            }
+        })?; // return the error if failed to peek
 
         self.advance()?; // return the error if failed to advance
 

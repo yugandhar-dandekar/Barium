@@ -71,12 +71,11 @@ impl Lexer {
 
         // allow advancing to the end
         if self.index_is_at_end(new_index) && new_index != self.source.len() {
-            return Err(Error::FailedToAdvance);
+            Err(Error::FailedToAdvance)
+        } else {
+            self.current = new_index;
+            Ok(())
         }
-
-        self.current = new_index;
-
-        Ok(())
     }
 
     pub fn advance(&mut self) -> Result<(), Error> {

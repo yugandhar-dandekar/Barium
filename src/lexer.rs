@@ -99,9 +99,9 @@ impl Lexer {
         let slice = self
             .source
             .get(start..end)
-            .map_or(None, |s| std::str::from_utf8(s).ok())?;
+            .map_or(None, |s| std::str::from_utf8(s).ok())?; // break if from_utf8 fails
 
-        Some(slice.into())
+        Some(slice.into()) // convert slice into Box<str>
     }
 
     /// add token with parameters set manually

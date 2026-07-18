@@ -98,10 +98,11 @@ impl Lexer {
     fn get_source_string(&self, start: usize, end: usize) -> Option<Box<str>> {
         let slice = self
             .source
-            .get(start..end)
-            .map_or(None, |s| std::str::from_utf8(s).ok())?; // break if from_utf8 fails
+            .get(start..end) // get slice as &[u8]
+            .and_then(|s| std::str::from_utf8(s).ok())? // if not None, convert into &str else break
+            .into(); // if converted into &str, convert into Box<str>
 
-        Some(slice.into()) // convert slice into Box<str>
+        Some(slice)
     }
 
     /// add token with parameters set manually

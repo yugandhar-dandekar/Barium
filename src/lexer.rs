@@ -1,20 +1,18 @@
 use crate::token::{self, Token};
+use std::fs;
+use std::path::Path;
 
 #[derive(Debug)]
 pub enum Error {
-    FailedToPeek,
     FailedToAdvance,
     FailedToIndexSource,
     UnexpectedEOF,
 }
 
-pub struct Lexer<'a> {
+pub struct Lexer {
     // source will be a list of u8 characters
-    pub source: &'a [u8],
+    pub source: Vec<u8>,
     pub tokens: Vec<Token>,
-
-    // fixed length of source
-    pub source_len: usize,
 
     // used for string slices
     pub start: usize,
@@ -24,13 +22,12 @@ pub struct Lexer<'a> {
     pub line: usize,
 }
 
-impl<'a> Lexer<'a> {
-    pub fn new(source: &'a [u8]) -> Self {
+impl Lexer {
+    #[allow(dead_code)]
+    pub fn new(source: Vec<u8>) -> Self {
         Self {
             source: source,
             tokens: Vec::new(),
-
-            source_len: source.len(),
 
             start: 0, // this will point to the start of each token, the length is 'current' - 'start'
             current: 0, // this will always point to the next character being lexed
@@ -38,27 +35,33 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    #[allow(dead_code)]
+    pub fn from_file(path: &Path) -> std::io::Result<Self> {
+        // if unsuccessful, break flow and return the error
+        Ok(Self::new(fs::read(path)?))
+    }
+
     pub fn index_is_at_end(&self, index: usize) -> bool {
-        index >= self.source_len
+        // index is at the end when the current character being processed is
+        //   past the end of the characters, for example, if we had the word
+        //   'test' the 4th character won't be at the end because the character
+        //   still hasn't been processed
+        index >= self.source.len()
     }
 
     pub fn is_at_end(&self) -> bool {
         self.index_is_at_end(self.current)
     }
 
-    pub fn peek_index(&self, index: usize) -> Result<u8, Error> {
-        if !self.index_is_at_end(index) {
-            Ok(self.source[index])
-        } else {
-            Err(Error::FailedToPeek)
-        }
+    pub fn peek_index(&self, index: usize) -> Option<u8> {
+        self.source.get(index).copied() // &u8 to u8
     }
 
-    pub fn peek(&self) -> Result<u8, Error> {
+    pub fn peek(&self) -> Option<u8> {
         self.peek_index(self.current)
     }
 
-    pub fn peek_next(&self) -> Result<u8, Error> {
+    pub fn peek_next(&self) -> Option<u8> {
         self.peek_index(self.current + 1)
     }
 
@@ -66,13 +69,12 @@ impl<'a> Lexer<'a> {
         let new_index = self.current + value;
 
         // allow advancing to the end
-        if self.index_is_at_end(new_index) && new_index != self.source_len {
-            return Err(Error::FailedToAdvance);
+        if self.index_is_at_end(new_index) && new_index != self.source.len() {
+            Err(Error::FailedToAdvance)
+        } else {
+            self.current = new_index;
+            Ok(())
         }
-
-        self.current = new_index;
-
-        Ok(())
     }
 
     pub fn advance(&mut self) -> Result<(), Error> {
@@ -80,22 +82,27 @@ impl<'a> Lexer<'a> {
     }
 
     pub fn peek_and_advance(&mut self) -> Result<u8, Error> {
-        let character = self.peek()?; // return the error if failed to peek
+        let character = self.peek().ok_or({
+            if self.is_at_end() {
+                Error::UnexpectedEOF // if the code has already reached the end
+            } else {
+                Error::FailedToIndexSource // if the code fails to peek
+            }
+        })?; // return the error if failed to peek
 
         self.advance()?; // return the error if failed to advance
 
         Ok(character) // return the character
     }
 
-    /// start is inclusive, end is not inclusive
-    pub fn get_source_slice(&self, start: usize, end: usize) -> Result<&[u8], Error> {
-        // start must not be greater than end
-        // end is not inclusive so it can be equal to 'source_len'
-        if start > end || end > self.source_len {
-            Err(Error::FailedToIndexSource)
-        } else {
-            Ok(&self.source[start..end])
-        }
+    fn get_source_string(&self, start: usize, end: usize) -> Option<Box<str>> {
+        let slice = self
+            .source
+            .get(start..end) // get slice as &[u8]
+            .and_then(|s| std::str::from_utf8(s).ok())? // if not None, convert into &str else break
+            .into(); // if converted into &str, convert into Box<str>
+
+        Some(slice)
     }
 
     /// add token with parameters set manually
@@ -119,8 +126,8 @@ impl<'a> Lexer<'a> {
         let line = self.line;
 
         let lexeme = self
-            .reference_array_to_box_str(self.get_source_slice(self.start, self.current)?)
-            .expect("Failed to convert lexeme into Box<str>");
+            .get_source_string(self.start, self.current)
+            .ok_or(Error::FailedToIndexSource)?;
 
         let token = Token {
             token_type,
@@ -135,19 +142,12 @@ impl<'a> Lexer<'a> {
 
     /// only advance if the next character == expected
     pub fn advance_if_match(&mut self, expected: u8) -> Result<bool, Error> {
-        if self.peek()? == expected {
+        if self.peek() == Some(expected) {
             self.advance()?;
             Ok(true)
         } else {
             Ok(false)
         }
-    }
-
-    /// converts &[u8] to Box<str>
-    pub fn reference_array_to_box_str(&self, u8_array: &[u8]) -> Result<Box<str>, ()> {
-        let box_str: Box<str> = str::from_utf8(u8_array).map_err(|_| ())?.into();
-
-        Ok(box_str)
     }
 
     /// scans a token, if any action fails, it will return with an error that can be
@@ -276,7 +276,7 @@ impl<'a> Lexer<'a> {
             b'\r' => {} // do nothing for carriage return
 
             b'\t' => {
-                while !self.is_at_end() && self.peek()? == b'\t' {
+                while self.peek() == Some(b'\t') {
                     self.advance()?;
                 }
 
@@ -284,7 +284,7 @@ impl<'a> Lexer<'a> {
             }
 
             b' ' => {
-                while !self.is_at_end() && self.peek()? == b' ' {
+                while self.peek() == Some(b' ') {
                     self.advance()?;
                 }
 
@@ -294,17 +294,18 @@ impl<'a> Lexer<'a> {
             b'"' => self.handle_string_literal()?,
             _ => {
                 if character.is_ascii_alphabetic() || character == b'_' {
-                    while !self.is_at_end()
-                        && (self.peek()?.is_ascii_alphanumeric() || self.peek()? == b'_')
+                    while self
+                        .peek()
+                        // checks if c exists and c is a alphanumeric or _
+                        .is_some_and(|c| c.is_ascii_alphanumeric() || c == b'_')
                     {
                         self.advance()?;
                     }
-
-                    self.add_token_automatically(token::TokenTypes::Identifier)?
+                    self.add_token_automatically(token::TokenTypes::Identifier)?;
                 } else if character.is_ascii_digit() {
                     self.handle_number_literal()?;
                 } else {
-                    self.add_token_automatically(token::TokenTypes::Unknown)?
+                    self.add_token_automatically(token::TokenTypes::Unknown)?;
                 }
             }
         }
@@ -313,7 +314,11 @@ impl<'a> Lexer<'a> {
     }
 
     pub fn handle_string_literal(&mut self) -> Result<(), Error> {
-        while !self.is_at_end() && self.peek()? != b'"' {
+        while self.peek() != Some(b'"') && !self.is_at_end() {
+            if self.peek() == Some(b'\n') {
+                self.line += 1;
+            }
+
             self.advance()?;
         }
 
@@ -322,12 +327,13 @@ impl<'a> Lexer<'a> {
             return Err(Error::UnexpectedEOF);
         }
 
+        // go past the ending double quote as it has been processed
         self.advance()?;
 
         // only get the characters in between the double quotes
         let lexeme = self
-            .reference_array_to_box_str(self.get_source_slice(self.start + 1, self.current - 1)?)
-            .expect("Failed to convert lexeme into Box<str>");
+            .get_source_string(self.start + 1, self.current - 1)
+            .ok_or(Error::FailedToIndexSource)?;
 
         self.add_token_manually(token::TokenTypes::CharString, lexeme, self.line);
 
@@ -335,18 +341,18 @@ impl<'a> Lexer<'a> {
     }
 
     pub fn handle_number_literal(&mut self) -> Result<(), Error> {
-        while !self.is_at_end() && self.peek()?.is_ascii_digit() {
+        while self.peek().is_some_and(|c| c.is_ascii_digit()) {
             self.advance()?;
         }
 
         if !self.is_at_end()
-            && self.peek()? == b'.'
+            && self.peek() == Some(b'.')
             && self.peek_next().map_or(false, |c| c.is_ascii_digit())
         {
             // skip the dot
             self.advance()?;
 
-            while !self.is_at_end() && self.peek()?.is_ascii_digit() {
+            while self.peek().is_some_and(|c| c.is_ascii_digit()) {
                 self.advance()?;
             }
 

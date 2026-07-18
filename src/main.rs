@@ -1,20 +1,30 @@
-use std::fs;
+use std::path::Path;
+
+use crate::token::Token;
 
 mod lexer;
 mod token;
 
-fn main() {
-    let contents: String = fs::read_to_string(".ignore/test").expect("Failed to read file");
-    let mut lexer = lexer::Lexer::new(&contents.as_bytes());
-
-    let tokens = lexer.lex_text().unwrap();
-
+fn print_tokens(tokens: Vec<Token>) {
     for token in tokens {
         match token.token_type {
-            // token::TokenTypes::Whitespace | token::TokenTypes::EndOfFile => {}
+            token::TokenTypes::Whitespace | token::TokenTypes::EndOfFile => {}
             _ => {
                 println!("{:?}", token);
             }
+        }
+    }
+}
+
+fn main() {
+    let mut lexer = lexer::Lexer::from_file(Path::new("./.ignore/test")).unwrap();
+
+    let tokens = lexer.lex_text();
+
+    match tokens {
+        Ok(tokens) => print_tokens(tokens),
+        Err(err) => {
+            eprintln!("{:?}", err)
         }
     }
 }

@@ -29,7 +29,7 @@ impl Lexer {
 
         Self {
             source,
-            tokens: Vec::with_capacity(source_len / 6),
+            tokens: Vec::with_capacity(source_len / 2),
 
             // this will point to the start of each token, the length is 'current' - 'start'
             start: 0,
@@ -48,11 +48,11 @@ impl Lexer {
     ///
     /// # Example
     ///
-    /// using 'source' as the word 'test'
-    ///
     /// ```
+    /// // self.source = "test"
+    ///
     /// assert_eq!(self.index_is_at_end(4), true);
-    /// assert_eq!(self.index_is_at_end(3), false);
+    /// assert_eq!(self.index_is_at_end(3), false); // index of 't'
     /// ```
     fn index_is_at_end(&self, index: usize) -> bool {
         index >= self.source.len()
@@ -96,6 +96,7 @@ impl Lexer {
         self.advance_by(1)
     }
 
+    /// Peeks the current character and advances if possible
     fn peek_and_advance(&mut self) -> Result<u8, Error> {
         let character = self.peek().ok_or({
             // if not ok
@@ -114,19 +115,7 @@ impl Lexer {
 
     /// Adds a token to `self.tokens` and decides the `line` and `lexeme` attribute automatically
     fn add_token_automatically(&mut self, token_type: token::TokenTypes) {
-        let line = self.line;
-
-        let start = self.start;
-        let end = self.current;
-
-        let token = Token {
-            token_type,
-            start,
-            end,
-            line,
-        };
-
-        self.tokens.push(token);
+        self.add_token_manually(token_type, self.start, self.current, self.line);
     }
 
     fn add_token_manually(

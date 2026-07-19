@@ -11,64 +11,84 @@ pub enum Error {
 
 pub struct Lexer {
     // source will be a list of u8 characters
-    pub source: Vec<u8>,
-    pub tokens: Vec<Token>,
+    source: Vec<u8>,
+    tokens: Vec<Token>,
 
     // used for string slices
-    pub start: usize,
-    pub current: usize,
+    start: usize,
+    current: usize,
 
     // to find what line a token is on
-    pub line: usize,
+    line: usize,
 }
 
 impl Lexer {
+    /// Default constructor for `Lexer`
     #[allow(dead_code)]
     pub fn new(source: Vec<u8>) -> Self {
         Self {
             source: source,
             tokens: Vec::new(),
 
-            start: 0, // this will point to the start of each token, the length is 'current' - 'start'
+            // this will point to the start of each token, the length is 'current' - 'start'
+            start: 0,
+
             current: 0, // this will always point to the next character being lexed
             line: 1,
         }
     }
 
     #[allow(dead_code)]
+    /// Constructor for 'Lexer' from a specified file path
     pub fn from_file(path: &Path) -> std::io::Result<Self> {
-        // if unsuccessful, break flow and return the error
+        // attempts to read contents from path, if failed it will break and return an IO error
         Ok(Self::new(fs::read(path)?))
     }
 
-    pub fn index_is_at_end(&self, index: usize) -> bool {
-        // index is at the end when the current character being processed is
-        //   past the end of the characters, for example, if we had the word
-        //   'test' the 4th character won't be at the end because the character
-        //   still hasn't been processed
+    /// Checks if `index` passed is at the end of the file.
+    ///
+    /// The lexer works by pointing to the character that will be processed next. Hence, 'index'
+    /// will have reached the end when it points to the location after the last character. For
+    /// example, the word 'test' has 4 characters and the last 't' has an index of 3,
+    /// 'index_is_at_end' will return true if a value >= 4 is passed
+    ///
+    /// # Example
+    ///
+    /// using 'source' as the word 'test'
+    ///
+    /// ```
+    /// assert_eq!(self.index_is_at_end(4), true);
+    /// assert_eq!(self.index_is_at_end(3), false);
+    /// ```
+    fn index_is_at_end(&self, index: usize) -> bool {
         index >= self.source.len()
     }
 
-    pub fn is_at_end(&self) -> bool {
+    /// Checks if `self.current` is at the end
+    fn is_at_end(&self) -> bool {
         self.index_is_at_end(self.current)
     }
 
-    pub fn peek_index(&self, index: usize) -> Option<u8> {
+    /// Returns the character at `index` if exists
+    fn peek_index(&self, index: usize) -> Option<u8> {
         self.source.get(index).copied() // &u8 to u8
     }
 
-    pub fn peek(&self) -> Option<u8> {
+    /// Returns the character currently being processed
+    fn peek(&self) -> Option<u8> {
         self.peek_index(self.current)
     }
 
-    pub fn peek_next(&self) -> Option<u8> {
+    /// Returns the character after the current character being processed
+    fn peek_next(&self) -> Option<u8> {
         self.peek_index(self.current + 1)
     }
 
-    pub fn advance_by(&mut self, value: usize) -> Result<(), Error> {
+    /// Increases `self.current` by `value`
+    fn advance_by(&mut self, value: usize) -> Result<(), Error> {
         let new_index = self.current + value;
 
-        // allow advancing to the end
+        // allow advancing to the end but not past the end
         if self.index_is_at_end(new_index) && new_index != self.source.len() {
             Err(Error::FailedToAdvance)
         } else {
@@ -77,41 +97,41 @@ impl Lexer {
         }
     }
 
-    pub fn advance(&mut self) -> Result<(), Error> {
+    /// Increments `self.current`
+    fn advance(&mut self) -> Result<(), Error> {
         self.advance_by(1)
     }
 
-    pub fn peek_and_advance(&mut self) -> Result<u8, Error> {
+    fn peek_and_advance(&mut self) -> Result<u8, Error> {
         let character = self.peek().ok_or({
+            // if not ok
+
             if self.is_at_end() {
                 Error::UnexpectedEOF // if the code has already reached the end
             } else {
                 Error::FailedToIndexSource // if the code fails to peek
             }
-        })?; // return the error if failed to peek
+        })?; // if not ok break and return error
 
         self.advance()?; // return the error if failed to advance
 
         Ok(character) // return the character
     }
 
+    /// Returns a string from the source between `start` and `end`, (`end` not inclusive)
     fn get_source_string(&self, start: usize, end: usize) -> Option<Box<str>> {
         let slice = self
             .source
             .get(start..end) // get slice as &[u8]
-            .and_then(|s| std::str::from_utf8(s).ok())? // if not None, convert into &str else break
-            .into(); // if converted into &str, convert into Box<str>
+            // if exists, convert into &str, else break and return None
+            .and_then(|s| std::str::from_utf8(s).ok())?
+            .into(); // if no break, convert into Box<str>
 
         Some(slice)
     }
 
-    /// add token with parameters set manually
-    pub fn add_token_manually(
-        &mut self,
-        token_type: token::TokenTypes,
-        lexeme: Box<str>,
-        line: usize,
-    ) {
+    /// Adds a token to `self.tokens` with control of all token attributes
+    fn add_token_manually(&mut self, token_type: token::TokenTypes, lexeme: Box<str>, line: usize) {
         let token = Token {
             token_type,
             lexeme,
@@ -121,12 +141,13 @@ impl Lexer {
         self.tokens.push(token);
     }
 
-    /// add token with parameters decided automatically
-    pub fn add_token_automatically(&mut self, token_type: token::TokenTypes) -> Result<(), Error> {
+    /// Adds a token to `self.tokens` and decides the `line` and `lexeme` attribute automatically
+    fn add_token_automatically(&mut self, token_type: token::TokenTypes) -> Result<(), Error> {
         let line = self.line;
 
         let lexeme = self
             .get_source_string(self.start, self.current)
+            // if 'get_source_string' failed, break and return error
             .ok_or(Error::FailedToIndexSource)?;
 
         let token = Token {
@@ -140,8 +161,8 @@ impl Lexer {
         Ok(())
     }
 
-    /// only advance if the next character == expected
-    pub fn advance_if_match(&mut self, expected: u8) -> Result<bool, Error> {
+    /// Advances if the current character being processed matches 'expected'
+    fn advance_if_match(&mut self, expected: u8) -> Result<bool, Error> {
         if self.peek() == Some(expected) {
             self.advance()?;
             Ok(true)
@@ -150,9 +171,8 @@ impl Lexer {
         }
     }
 
-    /// scans a token, if any action fails, it will return with an error that can be
-    ///   handled separately
-    pub fn scan(&mut self) -> Result<(), Error> {
+    /// Processes the current character and decides how to handle the token
+    fn scan(&mut self) -> Result<(), Error> {
         // get the current character
         let character = self.peek_and_advance()?;
 
@@ -280,7 +300,7 @@ impl Lexer {
                     self.advance()?;
                 }
 
-                self.add_token_automatically(token::TokenTypes::Whitespace)?
+                // self.add_token_automatically(token::TokenTypes::Whitespace)?
             }
 
             b' ' => {
@@ -288,22 +308,27 @@ impl Lexer {
                     self.advance()?;
                 }
 
-                self.add_token_automatically(token::TokenTypes::Whitespace)?
+                // self.add_token_automatically(token::TokenTypes::Whitespace)?
             }
 
             b'"' => self.handle_string_literal()?,
+
+            // default case
             _ => {
+                // identifiers are start with either 'a-z/A-Z' or '_'
                 if character.is_ascii_alphabetic() || character == b'_' {
                     while self
                         .peek()
-                        // checks if c exists and c is a alphanumeric or _
+                        // if c exists, check if it is alphanumeric or '_'
                         .is_some_and(|c| c.is_ascii_alphanumeric() || c == b'_')
                     {
                         self.advance()?;
                     }
                     self.add_token_automatically(token::TokenTypes::Identifier)?;
+                // handle numbers
                 } else if character.is_ascii_digit() {
                     self.handle_number_literal()?;
+                // default case add a token of type unknown
                 } else {
                     self.add_token_automatically(token::TokenTypes::Unknown)?;
                 }
@@ -313,8 +338,11 @@ impl Lexer {
         Ok(())
     }
 
-    pub fn handle_string_literal(&mut self) -> Result<(), Error> {
+    /// Handles string literal token type and automatically adds it to `self.tokens`
+    fn handle_string_literal(&mut self) -> Result<(), Error> {
+        // while '"' or end is not reached advance
         while self.peek() != Some(b'"') && !self.is_at_end() {
+            // if there is a newline increment the line count
             if self.peek() == Some(b'\n') {
                 self.line += 1;
             }
@@ -322,7 +350,7 @@ impl Lexer {
             self.advance()?;
         }
 
-        // if the advance has ended because of an EOF throw an error
+        // if advancing has ended because of 'is_at_end()' being true, return error early
         if self.is_at_end() {
             return Err(Error::UnexpectedEOF);
         }
@@ -330,23 +358,34 @@ impl Lexer {
         // go past the ending double quote as it has been processed
         self.advance()?;
 
-        // only get the characters in between the double quotes
         let lexeme = self
+            // only get the characters in between the double quotes
             .get_source_string(self.start + 1, self.current - 1)
-            .ok_or(Error::FailedToIndexSource)?;
+            // if not exists, no argument in closure because 'get_source_string' is None
+            .ok_or_else(|| {
+                // add a token with an empty lexeme
+                self.add_token_manually(token::TokenTypes::CharString, "".into(), self.line);
+                // return an error
+                Error::FailedToIndexSource
+            })?; // if error break flow, return early
 
+        // if 'get_source_string' is not None, add the token with appropriate lexeme
         self.add_token_manually(token::TokenTypes::CharString, lexeme, self.line);
 
         Ok(())
     }
 
-    pub fn handle_number_literal(&mut self) -> Result<(), Error> {
+    /// Handles number tokens and automatically adds it to `self.tokens`
+    fn handle_number_literal(&mut self) -> Result<(), Error> {
+        // check whether 'peek' is Some character. If it exists, check if it is an ascii digit
         while self.peek().is_some_and(|c| c.is_ascii_digit()) {
             self.advance()?;
         }
 
         if !self.is_at_end()
             && self.peek() == Some(b'.')
+            // if 'peek_next' is None, map it to false
+            // else check if it is an ascii digit
             && self.peek_next().map_or(false, |c| c.is_ascii_digit())
         {
             // skip the dot
@@ -364,6 +403,7 @@ impl Lexer {
         Ok(())
     }
 
+    /// Public method to lex the entire source provided and returns it as a list of tokens
     pub fn lex_text(&mut self) -> Result<Vec<Token>, Error> {
         // repeat until the code is at the end
         while !self.is_at_end() {

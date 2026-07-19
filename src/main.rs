@@ -10,7 +10,7 @@ fn main() {
     let mut lexer = lexer::Lexer::new(source);
 
     let start = Instant::now();
-    let _ = lexer.lex_text().unwrap();
+    lexer.lex_text().unwrap();
     let elapsed = start.elapsed();
 
     println!("Elapsed: {:?}", elapsed);

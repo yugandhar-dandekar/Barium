@@ -1,12 +1,11 @@
 #![allow(dead_code)]
 
-// #[derive(Debug, PartialEq)]
 pub enum TokenTypes {
     // special token types
     Unknown, // type is none of the others
     EndOfLine,
     EndOfFile,
-    Whitespace, // tab or 4 spaces
+    // Whitespace, // tab or 4 spaces
 
     // literal token types
     Identifier, // for all words

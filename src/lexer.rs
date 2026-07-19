@@ -1,7 +1,6 @@
 use crate::token::{self, Token};
-use std::fs;
-use std::path::Path;
 
+// allow printing
 #[derive(Debug)]
 pub enum Error {
     FailedToAdvance,
@@ -11,7 +10,7 @@ pub enum Error {
 
 pub struct Lexer {
     // source will be a list of u8 characters
-    source: Vec<u8>,
+    pub source: Vec<u8>,
     tokens: Vec<Token>,
 
     // used for string slices
@@ -26,9 +25,11 @@ impl Lexer {
     /// Default constructor for `Lexer`
     #[allow(dead_code)]
     pub fn new(source: Vec<u8>) -> Self {
+        let source_len = source.len();
+
         Self {
-            source: source,
-            tokens: Vec::new(),
+            source,
+            tokens: Vec::with_capacity(source_len / 6),
 
             // this will point to the start of each token, the length is 'current' - 'start'
             start: 0,
@@ -36,13 +37,6 @@ impl Lexer {
             current: 0, // this will always point to the next character being lexed
             line: 1,
         }
-    }
-
-    #[allow(dead_code)]
-    /// Constructor for 'Lexer' from a specified file path
-    pub fn from_file(path: &Path) -> std::io::Result<Self> {
-        // attempts to read contents from path, if failed it will break and return an IO error
-        Ok(Self::new(fs::read(path)?))
     }
 
     /// Checks if `index` passed is at the end of the file.
@@ -118,47 +112,38 @@ impl Lexer {
         Ok(character) // return the character
     }
 
-    /// Returns a string from the source between `start` and `end`, (`end` not inclusive)
-    fn get_source_string(&self, start: usize, end: usize) -> Option<Box<str>> {
-        let slice = self
-            .source
-            .get(start..end) // get slice as &[u8]
-            // if exists, convert into &str, else break and return None
-            .and_then(|s| std::str::from_utf8(s).ok())?
-            .into(); // if no break, convert into Box<str>
-
-        Some(slice)
-    }
-
-    /// Adds a token to `self.tokens` with control of all token attributes
-    fn add_token_manually(&mut self, token_type: token::TokenTypes, lexeme: Box<str>, line: usize) {
-        let token = Token {
-            token_type,
-            lexeme,
-            line,
-        };
-
-        self.tokens.push(token);
-    }
-
     /// Adds a token to `self.tokens` and decides the `line` and `lexeme` attribute automatically
-    fn add_token_automatically(&mut self, token_type: token::TokenTypes) -> Result<(), Error> {
+    fn add_token_automatically(&mut self, token_type: token::TokenTypes) {
         let line = self.line;
 
-        let lexeme = self
-            .get_source_string(self.start, self.current)
-            // if 'get_source_string' failed, break and return error
-            .ok_or(Error::FailedToIndexSource)?;
+        let start = self.start;
+        let end = self.current;
 
         let token = Token {
             token_type,
-            lexeme,
+            start,
+            end,
             line,
         };
 
         self.tokens.push(token);
+    }
 
-        Ok(())
+    fn add_token_manually(
+        &mut self,
+        token_type: token::TokenTypes,
+        start: usize,
+        end: usize,
+        line: usize,
+    ) {
+        let token = Token {
+            token_type,
+            start,
+            end,
+            line,
+        };
+
+        self.tokens.push(token);
     }
 
     /// Advances if the current character being processed matches 'expected'
@@ -177,118 +162,118 @@ impl Lexer {
         let character = self.peek_and_advance()?;
 
         match character {
-            b')' => self.add_token_automatically(token::TokenTypes::RParenthesis)?,
-            b'(' => self.add_token_automatically(token::TokenTypes::LParenthesis)?,
+            b')' => self.add_token_automatically(token::TokenTypes::RParenthesis),
+            b'(' => self.add_token_automatically(token::TokenTypes::LParenthesis),
 
-            b']' => self.add_token_automatically(token::TokenTypes::RBracket)?,
-            b'[' => self.add_token_automatically(token::TokenTypes::LBracket)?,
+            b']' => self.add_token_automatically(token::TokenTypes::RBracket),
+            b'[' => self.add_token_automatically(token::TokenTypes::LBracket),
 
-            b'{' => self.add_token_automatically(token::TokenTypes::LBrace)?,
-            b'}' => self.add_token_automatically(token::TokenTypes::RBrace)?,
+            b'{' => self.add_token_automatically(token::TokenTypes::LBrace),
+            b'}' => self.add_token_automatically(token::TokenTypes::RBrace),
 
-            b',' => self.add_token_automatically(token::TokenTypes::Comma)?,
-            b'.' => self.add_token_automatically(token::TokenTypes::Dot)?,
-            b';' => self.add_token_automatically(token::TokenTypes::Semicolon)?,
-            b':' => self.add_token_automatically(token::TokenTypes::Colon)?,
-            b'^' => self.add_token_automatically(token::TokenTypes::Caret)?,
-            b'~' => self.add_token_automatically(token::TokenTypes::Tilde)?,
+            b',' => self.add_token_automatically(token::TokenTypes::Comma),
+            b'.' => self.add_token_automatically(token::TokenTypes::Dot),
+            b';' => self.add_token_automatically(token::TokenTypes::Semicolon),
+            b':' => self.add_token_automatically(token::TokenTypes::Colon),
+            b'^' => self.add_token_automatically(token::TokenTypes::Caret),
+            b'~' => self.add_token_automatically(token::TokenTypes::Tilde),
 
             b'=' => {
                 if self.advance_if_match(b'=')? {
-                    self.add_token_automatically(token::TokenTypes::EqEqual)?
+                    self.add_token_automatically(token::TokenTypes::EqEqual)
                 } else {
-                    self.add_token_automatically(token::TokenTypes::Equal)?
+                    self.add_token_automatically(token::TokenTypes::Equal)
                 }
             }
 
             b'<' => {
                 if self.advance_if_match(b'=')? {
-                    self.add_token_automatically(token::TokenTypes::LessEqual)?
+                    self.add_token_automatically(token::TokenTypes::LessEqual)
                 } else {
-                    self.add_token_automatically(token::TokenTypes::Less)?
+                    self.add_token_automatically(token::TokenTypes::Less)
                 }
             }
 
             b'>' => {
                 if self.advance_if_match(b'=')? {
-                    self.add_token_automatically(token::TokenTypes::GreaterEqual)?
+                    self.add_token_automatically(token::TokenTypes::GreaterEqual)
                 } else {
-                    self.add_token_automatically(token::TokenTypes::Greater)?
+                    self.add_token_automatically(token::TokenTypes::Greater)
                 }
             }
 
             b'!' => {
                 if self.advance_if_match(b'=')? {
-                    self.add_token_automatically(token::TokenTypes::NotEqual)?
+                    self.add_token_automatically(token::TokenTypes::NotEqual)
                 } else {
-                    self.add_token_automatically(token::TokenTypes::Not)?
+                    self.add_token_automatically(token::TokenTypes::Not)
                 }
             }
 
             b'&' => {
                 if self.advance_if_match(b'&')? {
-                    self.add_token_automatically(token::TokenTypes::And)?
+                    self.add_token_automatically(token::TokenTypes::And)
                 } else {
-                    self.add_token_automatically(token::TokenTypes::Ampersand)?
+                    self.add_token_automatically(token::TokenTypes::Ampersand)
                 }
             }
 
             b'|' => {
                 if self.advance_if_match(b'|')? {
-                    self.add_token_automatically(token::TokenTypes::Or)?
+                    self.add_token_automatically(token::TokenTypes::Or)
                 } else {
-                    self.add_token_automatically(token::TokenTypes::Pipe)?
+                    self.add_token_automatically(token::TokenTypes::Pipe)
                 }
             }
 
             // operators
             b'+' => {
                 if self.advance_if_match(b'+')? {
-                    self.add_token_automatically(token::TokenTypes::PlusPlus)?
+                    self.add_token_automatically(token::TokenTypes::PlusPlus)
                 } else if self.advance_if_match(b'=')? {
-                    self.add_token_automatically(token::TokenTypes::PlusEqual)?
+                    self.add_token_automatically(token::TokenTypes::PlusEqual)
                 } else {
-                    self.add_token_automatically(token::TokenTypes::Plus)?
+                    self.add_token_automatically(token::TokenTypes::Plus)
                 }
             }
 
             b'-' => {
                 if self.advance_if_match(b'-')? {
-                    self.add_token_automatically(token::TokenTypes::MinusMinus)?
+                    self.add_token_automatically(token::TokenTypes::MinusMinus)
                 } else if self.advance_if_match(b'=')? {
-                    self.add_token_automatically(token::TokenTypes::MinusEqual)?
+                    self.add_token_automatically(token::TokenTypes::MinusEqual)
                 } else {
-                    self.add_token_automatically(token::TokenTypes::Minus)?
+                    self.add_token_automatically(token::TokenTypes::Minus)
                 }
             }
 
             b'*' => {
                 if self.advance_if_match(b'=')? {
-                    self.add_token_automatically(token::TokenTypes::AsteriskEqual)?
+                    self.add_token_automatically(token::TokenTypes::AsteriskEqual)
                 } else {
-                    self.add_token_automatically(token::TokenTypes::Asterisk)?
+                    self.add_token_automatically(token::TokenTypes::Asterisk)
                 }
             }
 
             b'/' => {
                 if self.advance_if_match(b'=')? {
-                    self.add_token_automatically(token::TokenTypes::SlashEqual)?
+                    self.add_token_automatically(token::TokenTypes::SlashEqual)
                 } else {
-                    self.add_token_automatically(token::TokenTypes::Slash)?
+                    self.add_token_automatically(token::TokenTypes::Slash)
                 }
             }
 
             b'%' => {
                 if self.advance_if_match(b'=')? {
-                    self.add_token_automatically(token::TokenTypes::PercentEqual)?
+                    self.add_token_automatically(token::TokenTypes::PercentEqual)
                 } else {
-                    self.add_token_automatically(token::TokenTypes::Percent)?
+                    self.add_token_automatically(token::TokenTypes::Percent)
                 }
             }
 
             b'\n' => {
                 self.line += 1;
-                self.add_token_automatically(token::TokenTypes::EndOfLine)?
+                self.add_token_automatically(token::TokenTypes::EndOfLine)
             }
 
             // files on windows end each line with \r\n, on other systems it may end with
@@ -324,13 +309,13 @@ impl Lexer {
                     {
                         self.advance()?;
                     }
-                    self.add_token_automatically(token::TokenTypes::Identifier)?;
+                    self.add_token_automatically(token::TokenTypes::Identifier);
                 // handle numbers
                 } else if character.is_ascii_digit() {
                     self.handle_number_literal()?;
                 // default case add a token of type unknown
                 } else {
-                    self.add_token_automatically(token::TokenTypes::Unknown)?;
+                    self.add_token_automatically(token::TokenTypes::Unknown);
                 }
             }
         }
@@ -358,19 +343,8 @@ impl Lexer {
         // go past the ending double quote as it has been processed
         self.advance()?;
 
-        let lexeme = self
-            // only get the characters in between the double quotes
-            .get_source_string(self.start + 1, self.current - 1)
-            // if not exists, no argument in closure because 'get_source_string' is None
-            .ok_or_else(|| {
-                // add a token with an empty lexeme
-                self.add_token_manually(token::TokenTypes::CharString, "".into(), self.line);
-                // return an error
-                Error::FailedToIndexSource
-            })?; // if error break flow, return early
-
         // if 'get_source_string' is not None, add the token with appropriate lexeme
-        self.add_token_manually(token::TokenTypes::CharString, lexeme, self.line);
+        self.add_token_automatically(token::TokenTypes::CharString);
 
         Ok(())
     }
@@ -395,9 +369,9 @@ impl Lexer {
                 self.advance()?;
             }
 
-            self.add_token_automatically(token::TokenTypes::Float)?;
+            self.add_token_automatically(token::TokenTypes::Float);
         } else {
-            self.add_token_automatically(token::TokenTypes::Integer)?;
+            self.add_token_automatically(token::TokenTypes::Integer);
         }
 
         Ok(())
@@ -413,7 +387,12 @@ impl Lexer {
         }
 
         // add end token
-        self.add_token_manually(token::TokenTypes::EndOfFile, Box::from("EOF"), self.line);
+        self.add_token_manually(
+            token::TokenTypes::EndOfFile,
+            self.current,
+            self.current,
+            self.line,
+        );
 
         // takes ownership of tokens and returns it
         Ok(std::mem::take(&mut self.tokens))

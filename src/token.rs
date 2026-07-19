@@ -1,8 +1,6 @@
 #![allow(dead_code)]
 
-use std::fmt;
-
-#[derive(Debug, PartialEq)]
+// #[derive(Debug, PartialEq)]
 pub enum TokenTypes {
     // special token types
     Unknown, // type is none of the others
@@ -71,22 +69,7 @@ pub enum TokenTypes {
 
 pub struct Token {
     pub token_type: TokenTypes,
-    pub lexeme: Box<str>,
+    pub start: usize,
+    pub end: usize,
     pub line: usize,
-}
-
-impl fmt::Debug for Token {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "Token({:?}, {:?}, {})",
-            self.token_type, self.lexeme, self.line
-        )
-    }
-}
-
-impl fmt::Display for Token {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "[{}]{:?}", self.line, self.lexeme)
-    }
 }

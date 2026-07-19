@@ -1,30 +1,17 @@
-use std::path::Path;
-
-use crate::token::Token;
+use std::time::Instant;
 
 mod lexer;
 mod token;
 
-fn print_tokens(tokens: Vec<Token>) {
-    for token in tokens {
-        match token.token_type {
-            token::TokenTypes::Whitespace | token::TokenTypes::EndOfFile => {}
-            _ => {
-                println!("{:?}", token);
-            }
-        }
-    }
-}
-
 fn main() {
-    let mut lexer = lexer::Lexer::from_file(Path::new("./.ignore/test")).unwrap();
+    let line = b"let x = 12345 + variable_name * 3.14;\n";
+    let source = line.repeat(1_000_000);
 
-    let tokens = lexer.lex_text();
+    let mut lexer = lexer::Lexer::new(source);
 
-    match tokens {
-        Ok(tokens) => print_tokens(tokens),
-        Err(err) => {
-            eprintln!("{:?}", err)
-        }
-    }
+    let start = Instant::now();
+    let _ = lexer.lex_text().unwrap();
+    let elapsed = start.elapsed();
+
+    println!("Elapsed: {:?}", elapsed);
 }

@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+#[repr(u8)]
 pub enum TokenTypes {
     // special token types
     Unknown, // type is none of the others
@@ -68,7 +69,7 @@ pub enum TokenTypes {
 
 pub struct Token {
     pub token_type: TokenTypes,
-    pub start: usize,
-    pub end: usize,
-    pub line: usize,
+    pub start: u32,
+    pub end: u32,
+    pub line: u32,
 }

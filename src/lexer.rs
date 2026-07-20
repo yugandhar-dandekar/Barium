@@ -64,16 +64,19 @@ impl Lexer {
     }
 
     /// Returns the character at `index` if exists
+    #[must_use]
     fn peek_index(&self, index: usize) -> Option<u8> {
         self.source.get(index).copied() // &u8 to u8
     }
 
     /// Returns the character currently being processed
+    #[must_use]
     fn peek(&self) -> Option<u8> {
         self.peek_index(self.current)
     }
 
     /// Returns the character after the current character being processed
+    #[must_use]
     fn peek_next(&self) -> Option<u8> {
         self.peek_index(self.current + 1)
     }

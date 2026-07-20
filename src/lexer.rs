@@ -1,7 +1,6 @@
 use crate::token::{self, Token};
-use std::fs;
-use std::path::Path;
 
+// allow printing
 #[derive(Debug)]
 pub enum Error {
     FailedToAdvance,
@@ -12,63 +11,81 @@ pub enum Error {
 pub struct Lexer {
     // source will be a list of u8 characters
     pub source: Vec<u8>,
-    pub tokens: Vec<Token>,
+    tokens: Vec<Token>,
 
     // used for string slices
-    pub start: usize,
-    pub current: usize,
+    start: usize,
+    current: usize,
 
     // to find what line a token is on
-    pub line: usize,
+    line: usize,
 }
 
 impl Lexer {
+    /// Default constructor for `Lexer`
     #[allow(dead_code)]
     pub fn new(source: Vec<u8>) -> Self {
-        Self {
-            source: source,
-            tokens: Vec::new(),
+        let source_len = source.len();
 
-            start: 0, // this will point to the start of each token, the length is 'current' - 'start'
+        Self {
+            source,
+            tokens: Vec::with_capacity(source_len / 3),
+
+            // this will point to the start of each token, the length is 'current' - 'start'
+            start: 0,
+
             current: 0, // this will always point to the next character being lexed
             line: 1,
         }
     }
 
-    #[allow(dead_code)]
-    pub fn from_file(path: &Path) -> std::io::Result<Self> {
-        // if unsuccessful, break flow and return the error
-        Ok(Self::new(fs::read(path)?))
-    }
-
-    pub fn index_is_at_end(&self, index: usize) -> bool {
-        // index is at the end when the current character being processed is
-        //   past the end of the characters, for example, if we had the word
-        //   'test' the 4th character won't be at the end because the character
-        //   still hasn't been processed
+    /// Checks if `index` passed is at the end of the file.
+    ///
+    /// The lexer works by pointing to the character that will be processed next. Hence, 'index'
+    /// will have reached the end when it points to the location after the last character. For
+    /// example, the word 'test' has 4 characters and the last 't' has an index of 3,
+    /// 'index_is_at_end' will return true if a value >= 4 is passed
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// // self.source = "test"
+    ///
+    /// assert_eq!(self.index_is_at_end(4), true);
+    /// assert_eq!(self.index_is_at_end(3), false); // index of 't'
+    /// ```
+    fn index_is_at_end(&self, index: usize) -> bool {
         index >= self.source.len()
     }
 
-    pub fn is_at_end(&self) -> bool {
+    /// Checks if `self.current` is at the end
+    fn is_at_end(&self) -> bool {
         self.index_is_at_end(self.current)
     }
 
-    pub fn peek_index(&self, index: usize) -> Option<u8> {
+    /// Returns the character at `index` if exists
+    #[must_use]
+    fn peek_index(&self, index: usize) -> Option<u8> {
         self.source.get(index).copied() // &u8 to u8
     }
 
-    pub fn peek(&self) -> Option<u8> {
+    /// Returns the character currently being processed
+    #[must_use]
+    fn peek(&self) -> Option<u8> {
         self.peek_index(self.current)
     }
 
-    pub fn peek_next(&self) -> Option<u8> {
+    /// Returns the character after the current character being processed
+    #[must_use]
+    fn peek_next(&self) -> Option<u8> {
         self.peek_index(self.current + 1)
     }
 
-    pub fn advance_by(&mut self, value: usize) -> Result<(), Error> {
+    /// Increases `self.current` by `value`
+    fn advance_by(&mut self, value: usize) -> Result<(), Error> {
         let new_index = self.current + value;
 
-        // allow advancing to the end
+        // allow advancing to the end but not past the end
         if self.index_is_at_end(new_index) && new_index != self.source.len() {
             Err(Error::FailedToAdvance)
         } else {
@@ -77,71 +94,52 @@ impl Lexer {
         }
     }
 
-    pub fn advance(&mut self) -> Result<(), Error> {
+    /// Increments `self.current`
+    fn advance(&mut self) -> Result<(), Error> {
         self.advance_by(1)
     }
 
-    pub fn peek_and_advance(&mut self) -> Result<u8, Error> {
+    /// Peeks the current character and advances if possible
+    fn peek_and_advance(&mut self) -> Result<u8, Error> {
         let character = self.peek().ok_or({
+            // if not ok
+
             if self.is_at_end() {
                 Error::UnexpectedEOF // if the code has already reached the end
             } else {
                 Error::FailedToIndexSource // if the code fails to peek
             }
-        })?; // return the error if failed to peek
+        })?; // if not ok break and return error
 
         self.advance()?; // return the error if failed to advance
 
         Ok(character) // return the character
     }
 
-    fn get_source_string(&self, start: usize, end: usize) -> Option<Box<str>> {
-        let slice = self
-            .source
-            .get(start..end) // get slice as &[u8]
-            .and_then(|s| std::str::from_utf8(s).ok())? // if not None, convert into &str else break
-            .into(); // if converted into &str, convert into Box<str>
-
-        Some(slice)
+    /// Adds a token to `self.tokens` and decides the `line` and `lexeme` attribute automatically
+    fn add_token_automatically(&mut self, token_type: token::TokenTypes) {
+        self.add_token_manually(token_type, self.start, self.current, self.line);
     }
 
-    /// add token with parameters set manually
-    pub fn add_token_manually(
+    fn add_token_manually(
         &mut self,
         token_type: token::TokenTypes,
-        lexeme: Box<str>,
+        start: usize,
+        end: usize,
         line: usize,
     ) {
         let token = Token {
             token_type,
-            lexeme,
-            line,
+            start: start as u32,
+            end: end as u32,
+            line: line as u32,
         };
 
         self.tokens.push(token);
     }
 
-    /// add token with parameters decided automatically
-    pub fn add_token_automatically(&mut self, token_type: token::TokenTypes) -> Result<(), Error> {
-        let line = self.line;
-
-        let lexeme = self
-            .get_source_string(self.start, self.current)
-            .ok_or(Error::FailedToIndexSource)?;
-
-        let token = Token {
-            token_type,
-            lexeme,
-            line,
-        };
-
-        self.tokens.push(token);
-
-        Ok(())
-    }
-
-    /// only advance if the next character == expected
-    pub fn advance_if_match(&mut self, expected: u8) -> Result<bool, Error> {
+    /// Advances if the current character being processed matches 'expected'
+    fn advance_if_match(&mut self, expected: u8) -> Result<bool, Error> {
         if self.peek() == Some(expected) {
             self.advance()?;
             Ok(true)
@@ -150,125 +148,124 @@ impl Lexer {
         }
     }
 
-    /// scans a token, if any action fails, it will return with an error that can be
-    ///   handled separately
-    pub fn scan(&mut self) -> Result<(), Error> {
+    /// Processes the current character and decides how to handle the token
+    fn scan(&mut self) -> Result<(), Error> {
         // get the current character
         let character = self.peek_and_advance()?;
 
         match character {
-            b')' => self.add_token_automatically(token::TokenTypes::RParenthesis)?,
-            b'(' => self.add_token_automatically(token::TokenTypes::LParenthesis)?,
+            b')' => self.add_token_automatically(token::TokenTypes::RParenthesis),
+            b'(' => self.add_token_automatically(token::TokenTypes::LParenthesis),
 
-            b']' => self.add_token_automatically(token::TokenTypes::RBracket)?,
-            b'[' => self.add_token_automatically(token::TokenTypes::LBracket)?,
+            b']' => self.add_token_automatically(token::TokenTypes::RBracket),
+            b'[' => self.add_token_automatically(token::TokenTypes::LBracket),
 
-            b'{' => self.add_token_automatically(token::TokenTypes::LBrace)?,
-            b'}' => self.add_token_automatically(token::TokenTypes::RBrace)?,
+            b'{' => self.add_token_automatically(token::TokenTypes::LBrace),
+            b'}' => self.add_token_automatically(token::TokenTypes::RBrace),
 
-            b',' => self.add_token_automatically(token::TokenTypes::Comma)?,
-            b'.' => self.add_token_automatically(token::TokenTypes::Dot)?,
-            b';' => self.add_token_automatically(token::TokenTypes::Semicolon)?,
-            b':' => self.add_token_automatically(token::TokenTypes::Colon)?,
-            b'^' => self.add_token_automatically(token::TokenTypes::Caret)?,
-            b'~' => self.add_token_automatically(token::TokenTypes::Tilde)?,
+            b',' => self.add_token_automatically(token::TokenTypes::Comma),
+            b'.' => self.add_token_automatically(token::TokenTypes::Dot),
+            b';' => self.add_token_automatically(token::TokenTypes::Semicolon),
+            b':' => self.add_token_automatically(token::TokenTypes::Colon),
+            b'^' => self.add_token_automatically(token::TokenTypes::Caret),
+            b'~' => self.add_token_automatically(token::TokenTypes::Tilde),
 
             b'=' => {
                 if self.advance_if_match(b'=')? {
-                    self.add_token_automatically(token::TokenTypes::EqEqual)?
+                    self.add_token_automatically(token::TokenTypes::EqEqual)
                 } else {
-                    self.add_token_automatically(token::TokenTypes::Equal)?
+                    self.add_token_automatically(token::TokenTypes::Equal)
                 }
             }
 
             b'<' => {
                 if self.advance_if_match(b'=')? {
-                    self.add_token_automatically(token::TokenTypes::LessEqual)?
+                    self.add_token_automatically(token::TokenTypes::LessEqual)
                 } else {
-                    self.add_token_automatically(token::TokenTypes::Less)?
+                    self.add_token_automatically(token::TokenTypes::Less)
                 }
             }
 
             b'>' => {
                 if self.advance_if_match(b'=')? {
-                    self.add_token_automatically(token::TokenTypes::GreaterEqual)?
+                    self.add_token_automatically(token::TokenTypes::GreaterEqual)
                 } else {
-                    self.add_token_automatically(token::TokenTypes::Greater)?
+                    self.add_token_automatically(token::TokenTypes::Greater)
                 }
             }
 
             b'!' => {
                 if self.advance_if_match(b'=')? {
-                    self.add_token_automatically(token::TokenTypes::NotEqual)?
+                    self.add_token_automatically(token::TokenTypes::NotEqual)
                 } else {
-                    self.add_token_automatically(token::TokenTypes::Not)?
+                    self.add_token_automatically(token::TokenTypes::Not)
                 }
             }
 
             b'&' => {
                 if self.advance_if_match(b'&')? {
-                    self.add_token_automatically(token::TokenTypes::And)?
+                    self.add_token_automatically(token::TokenTypes::And)
                 } else {
-                    self.add_token_automatically(token::TokenTypes::Ampersand)?
+                    self.add_token_automatically(token::TokenTypes::Ampersand)
                 }
             }
 
             b'|' => {
                 if self.advance_if_match(b'|')? {
-                    self.add_token_automatically(token::TokenTypes::Or)?
+                    self.add_token_automatically(token::TokenTypes::Or)
                 } else {
-                    self.add_token_automatically(token::TokenTypes::Pipe)?
+                    self.add_token_automatically(token::TokenTypes::Pipe)
                 }
             }
 
             // operators
             b'+' => {
                 if self.advance_if_match(b'+')? {
-                    self.add_token_automatically(token::TokenTypes::PlusPlus)?
+                    self.add_token_automatically(token::TokenTypes::PlusPlus)
                 } else if self.advance_if_match(b'=')? {
-                    self.add_token_automatically(token::TokenTypes::PlusEqual)?
+                    self.add_token_automatically(token::TokenTypes::PlusEqual)
                 } else {
-                    self.add_token_automatically(token::TokenTypes::Plus)?
+                    self.add_token_automatically(token::TokenTypes::Plus)
                 }
             }
 
             b'-' => {
                 if self.advance_if_match(b'-')? {
-                    self.add_token_automatically(token::TokenTypes::MinusMinus)?
+                    self.add_token_automatically(token::TokenTypes::MinusMinus)
                 } else if self.advance_if_match(b'=')? {
-                    self.add_token_automatically(token::TokenTypes::MinusEqual)?
+                    self.add_token_automatically(token::TokenTypes::MinusEqual)
                 } else {
-                    self.add_token_automatically(token::TokenTypes::Minus)?
+                    self.add_token_automatically(token::TokenTypes::Minus)
                 }
             }
 
             b'*' => {
                 if self.advance_if_match(b'=')? {
-                    self.add_token_automatically(token::TokenTypes::AsteriskEqual)?
+                    self.add_token_automatically(token::TokenTypes::AsteriskEqual)
                 } else {
-                    self.add_token_automatically(token::TokenTypes::Asterisk)?
+                    self.add_token_automatically(token::TokenTypes::Asterisk)
                 }
             }
 
             b'/' => {
                 if self.advance_if_match(b'=')? {
-                    self.add_token_automatically(token::TokenTypes::SlashEqual)?
+                    self.add_token_automatically(token::TokenTypes::SlashEqual)
                 } else {
-                    self.add_token_automatically(token::TokenTypes::Slash)?
+                    self.add_token_automatically(token::TokenTypes::Slash)
                 }
             }
 
             b'%' => {
                 if self.advance_if_match(b'=')? {
-                    self.add_token_automatically(token::TokenTypes::PercentEqual)?
+                    self.add_token_automatically(token::TokenTypes::PercentEqual)
                 } else {
-                    self.add_token_automatically(token::TokenTypes::Percent)?
+                    self.add_token_automatically(token::TokenTypes::Percent)
                 }
             }
 
             b'\n' => {
                 self.line += 1;
-                self.add_token_automatically(token::TokenTypes::EndOfLine)?
+                self.add_token_automatically(token::TokenTypes::EndOfLine)
             }
 
             // files on windows end each line with \r\n, on other systems it may end with
@@ -280,7 +277,7 @@ impl Lexer {
                     self.advance()?;
                 }
 
-                self.add_token_automatically(token::TokenTypes::Whitespace)?
+                // self.add_token_automatically(token::TokenTypes::Whitespace)?
             }
 
             b' ' => {
@@ -288,24 +285,29 @@ impl Lexer {
                     self.advance()?;
                 }
 
-                self.add_token_automatically(token::TokenTypes::Whitespace)?
+                // self.add_token_automatically(token::TokenTypes::Whitespace)?
             }
 
             b'"' => self.handle_string_literal()?,
+
+            // default case
             _ => {
+                // identifiers are start with either 'a-z/A-Z' or '_'
                 if character.is_ascii_alphabetic() || character == b'_' {
                     while self
                         .peek()
-                        // checks if c exists and c is a alphanumeric or _
+                        // if c exists, check if it is alphanumeric or '_'
                         .is_some_and(|c| c.is_ascii_alphanumeric() || c == b'_')
                     {
                         self.advance()?;
                     }
-                    self.add_token_automatically(token::TokenTypes::Identifier)?;
+                    self.add_token_automatically(token::TokenTypes::Identifier);
+                // handle numbers
                 } else if character.is_ascii_digit() {
                     self.handle_number_literal()?;
+                // default case add a token of type unknown
                 } else {
-                    self.add_token_automatically(token::TokenTypes::Unknown)?;
+                    self.add_token_automatically(token::TokenTypes::Unknown);
                 }
             }
         }
@@ -313,8 +315,11 @@ impl Lexer {
         Ok(())
     }
 
-    pub fn handle_string_literal(&mut self) -> Result<(), Error> {
+    /// Handles string literal token type and automatically adds it to `self.tokens`
+    fn handle_string_literal(&mut self) -> Result<(), Error> {
+        // while '"' or end is not reached advance
         while self.peek() != Some(b'"') && !self.is_at_end() {
+            // if there is a newline increment the line count
             if self.peek() == Some(b'\n') {
                 self.line += 1;
             }
@@ -322,7 +327,7 @@ impl Lexer {
             self.advance()?;
         }
 
-        // if the advance has ended because of an EOF throw an error
+        // if advancing has ended because of 'is_at_end()' being true, return error early
         if self.is_at_end() {
             return Err(Error::UnexpectedEOF);
         }
@@ -330,23 +335,23 @@ impl Lexer {
         // go past the ending double quote as it has been processed
         self.advance()?;
 
-        // only get the characters in between the double quotes
-        let lexeme = self
-            .get_source_string(self.start + 1, self.current - 1)
-            .ok_or(Error::FailedToIndexSource)?;
-
-        self.add_token_manually(token::TokenTypes::CharString, lexeme, self.line);
+        // if 'get_source_string' is not None, add the token with appropriate lexeme
+        self.add_token_automatically(token::TokenTypes::CharString);
 
         Ok(())
     }
 
-    pub fn handle_number_literal(&mut self) -> Result<(), Error> {
+    /// Handles number tokens and automatically adds it to `self.tokens`
+    fn handle_number_literal(&mut self) -> Result<(), Error> {
+        // check whether 'peek' is Some character. If it exists, check if it is an ascii digit
         while self.peek().is_some_and(|c| c.is_ascii_digit()) {
             self.advance()?;
         }
 
         if !self.is_at_end()
             && self.peek() == Some(b'.')
+            // if 'peek_next' is None, map it to false
+            // else check if it is an ascii digit
             && self.peek_next().map_or(false, |c| c.is_ascii_digit())
         {
             // skip the dot
@@ -356,14 +361,15 @@ impl Lexer {
                 self.advance()?;
             }
 
-            self.add_token_automatically(token::TokenTypes::Float)?;
+            self.add_token_automatically(token::TokenTypes::Float);
         } else {
-            self.add_token_automatically(token::TokenTypes::Integer)?;
+            self.add_token_automatically(token::TokenTypes::Integer);
         }
 
         Ok(())
     }
 
+    /// Public method to lex the entire source provided and returns it as a list of tokens
     pub fn lex_text(&mut self) -> Result<Vec<Token>, Error> {
         // repeat until the code is at the end
         while !self.is_at_end() {
@@ -373,7 +379,12 @@ impl Lexer {
         }
 
         // add end token
-        self.add_token_manually(token::TokenTypes::EndOfFile, Box::from("EOF"), self.line);
+        self.add_token_manually(
+            token::TokenTypes::EndOfFile,
+            self.current,
+            self.current,
+            self.line,
+        );
 
         // takes ownership of tokens and returns it
         Ok(std::mem::take(&mut self.tokens))

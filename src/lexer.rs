@@ -29,7 +29,7 @@ impl Lexer {
 
         Self {
             source,
-            tokens: Vec::with_capacity(source_len / 2),
+            tokens: Vec::with_capacity(source_len / 3),
 
             // this will point to the start of each token, the length is 'current' - 'start'
             start: 0,
@@ -127,9 +127,9 @@ impl Lexer {
     ) {
         let token = Token {
             token_type,
-            start,
-            end,
-            line,
+            start: start as u32,
+            end: end as u32,
+            line: line as u32,
         };
 
         self.tokens.push(token);

@@ -26,8 +26,16 @@ fn main() {
         let end = token.end as usize;
         let lexeme = String::from_utf8_lossy(&lexer.source[start..end]);
 
-        println!("Token({:?} {:?})", token.token_type, lexeme);
+        println!(
+            "{}({} {})",
+            format!("Token").bright_cyan(),
+            format!("{:?}", token.token_type).bright_yellow(),
+            format!("{:?}", lexeme).bright_green()
+        );
     }
 
-    println!("Elapsed: {:?}", elapsed);
+    println!(
+        "{}",
+        format!("Elapsed: {:?}", elapsed).bright_purple().italic()
+    );
 }

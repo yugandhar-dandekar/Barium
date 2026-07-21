@@ -1,17 +1,24 @@
+#![allow(unused_imports)]
+use std::env;
+use std::path::Path;
 use std::time::Instant;
 
 mod lexer;
 mod token;
 
 fn main() {
-    let line = b"let x = 12345 + variable_name * 3.14;\n";
-    let source = line.repeat(1_000_000);
+    let args: Vec<String> = env::args().collect();
+    let source: Vec<u8> = std::fs::read_to_string(&args[1]).unwrap().into_bytes();
 
     let mut lexer = lexer::Lexer::new(source);
 
     let start = Instant::now();
-    lexer.lex_text().unwrap();
+    let tokens = lexer.lex_text().unwrap();
     let elapsed = start.elapsed();
+
+    for token in tokens {
+        println!("{:?}", token.token_type);
+    }
 
     println!("Elapsed: {:?}", elapsed);
 }

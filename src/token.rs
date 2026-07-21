@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 #[repr(u8)]
+#[derive(Debug)]
 pub enum TokenTypes {
     // special token types
     Unknown, // type is none of the others
@@ -12,6 +13,7 @@ pub enum TokenTypes {
     Identifier, // for all words
     Keyword,    // if word lexed matches one of the keywords
     CharString, // contained within double quotes, e.g. "Test"
+    Char,       // for character literals 'a'
     Integer,    // a series of connected numbers, e.g. 73847
     Float,      // 2 series of connected numbers joined by one full stop, e.g. 384.384
 

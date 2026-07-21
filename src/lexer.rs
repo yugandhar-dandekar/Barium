@@ -1,4 +1,5 @@
 use crate::token::{self, Token};
+use std::path::Path;
 
 // allow printing
 #[derive(Debug)]
@@ -6,6 +7,8 @@ pub enum Error {
     FailedToAdvance,
     FailedToIndexSource,
     UnexpectedEOF,
+    ErroneousEscapeCharacter,
+    UnterminatedCharLiteral,
 }
 
 pub struct Lexer {
@@ -37,6 +40,13 @@ impl Lexer {
             current: 0, // this will always point to the next character being lexed
             line: 1,
         }
+    }
+
+    /// Constructor from file
+    #[allow(dead_code)]
+    pub fn from_file(path: &Path) -> Result<Self, std::io::Error> {
+        let source = std::fs::read(path)?;
+        Ok(Self::new(source))
     }
 
     /// Checks if `index` passed is at the end of the file.
@@ -289,6 +299,7 @@ impl Lexer {
             }
 
             b'"' => self.handle_string_literal()?,
+            b'\'' => self.handle_character_literal()?,
 
             // default case
             _ => {
@@ -365,6 +376,31 @@ impl Lexer {
         } else {
             self.add_token_automatically(token::TokenTypes::Integer);
         }
+
+        Ok(())
+    }
+
+    fn handle_character_literal(&mut self) -> Result<(), Error> {
+        if self.peek() == Some(b'\\') {
+            self.advance()?; // go past the '\'
+
+            let escape_char = self.peek_and_advance()?;
+
+            match escape_char {
+                b'n' | b't' | b'r' | b'\\' | b'\'' | b'"' | b'0' => {}
+                _ => return Err(Error::ErroneousEscapeCharacter),
+            }
+        } else {
+            // regular single character: consume it
+            self.peek_and_advance()?;
+        }
+
+        if self.peek() != Some(b'\'') {
+            return Err(Error::UnterminatedCharLiteral);
+        }
+        self.advance()?; // go past end '
+
+        self.add_token_automatically(token::TokenTypes::Char);
 
         Ok(())
     }

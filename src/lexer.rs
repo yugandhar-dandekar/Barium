@@ -101,11 +101,29 @@ impl Lexer {
     }
 
     /// Checks if `self.current` is at the end
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // self.source = "test"
+    ///
+    /// self.consume_n(3);
+    ///
+    /// assert_eq!(self.is_at_end(), true);
+    /// ```
     fn is_at_end(&self) -> bool {
         self.index_is_at_end(self.current)
     }
 
     /// Returns the character at `index` if exists
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// // self.source = "test"
+    ///
+    /// assert_eq!(self.peek(), Some(b't'));
+    /// ```
     #[must_use]
     fn peek_index(&self, index: usize) -> Option<u8> {
         self.source.get(index).copied() // &u8 to u8
@@ -118,14 +136,30 @@ impl Lexer {
     }
 
     /// Returns the character after the current character being processed
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // self.source = "test"
+    ///
+    /// assert_eq!(self.peek_next(), Some(b'e'));
+    /// ```
     #[must_use]
     fn peek_next(&self) -> Option<u8> {
         self.peek_index(self.current + 1)
     }
 
-    /// Increases `self.current` by `value`
-    fn advance_by(&mut self, value: usize) -> Result<(), Error> {
-        let new_index = self.current + value;
+    /// Increases `self.current` by `n`
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // self.source = "test"
+    ///
+    /// self.consume_n(2); // increases `self.current` by 2, now points from 't' to 's'
+    /// ```
+    fn consume_n(&mut self, n: usize) -> Result<(), Error> {
+        let new_index = self.current + n;
 
         // allow advancing to the end but not past the end
         if self.index_is_at_end(new_index) && new_index != self.source.len() {
@@ -140,12 +174,12 @@ impl Lexer {
     }
 
     /// Increments `self.current`
-    fn advance(&mut self) -> Result<(), Error> {
-        self.advance_by(1)
+    fn consume(&mut self) -> Result<(), Error> {
+        self.consume_n(1)
     }
 
     /// Peeks the current character and advances if possible
-    fn peek_and_advance(&mut self) -> Result<u8, Error> {
+    fn peek_and_consume(&mut self) -> Result<u8, Error> {
         let character = self.peek().ok_or({
             // if not ok
 
@@ -159,7 +193,7 @@ impl Lexer {
             }
         })?; // if not ok break and return error
 
-        self.advance()?; // return the error if failed to advance
+        self.consume()?; // return the error if failed to advance
 
         Ok(character) // return the character
     }
@@ -187,9 +221,9 @@ impl Lexer {
     }
 
     /// Advances if the current character being processed matches 'expected'
-    fn advance_if_match(&mut self, expected: u8) -> Result<bool, Error> {
+    fn consume_if_match(&mut self, expected: u8) -> Result<bool, Error> {
         if self.peek() == Some(expected) {
-            self.advance()?;
+            self.consume()?;
             Ok(true)
         } else {
             Ok(false)
@@ -199,7 +233,7 @@ impl Lexer {
     /// Processes the current character and decides how to handle the token
     fn scan(&mut self) -> Result<(), Error> {
         // get the current character
-        let character = self.peek_and_advance()?;
+        let character = self.peek_and_consume()?;
 
         match character {
             b')' => self.add_token_automatically(token::TokenTypes::RParenthesis),
@@ -219,7 +253,7 @@ impl Lexer {
             b'~' => self.add_token_automatically(token::TokenTypes::Tilde),
 
             b'=' => {
-                if self.advance_if_match(b'=')? {
+                if self.consume_if_match(b'=')? {
                     self.add_token_automatically(token::TokenTypes::EqEqual)
                 } else {
                     self.add_token_automatically(token::TokenTypes::Equal)
@@ -227,7 +261,7 @@ impl Lexer {
             }
 
             b'<' => {
-                if self.advance_if_match(b'=')? {
+                if self.consume_if_match(b'=')? {
                     self.add_token_automatically(token::TokenTypes::LessEqual)
                 } else {
                     self.add_token_automatically(token::TokenTypes::Less)
@@ -235,7 +269,7 @@ impl Lexer {
             }
 
             b'>' => {
-                if self.advance_if_match(b'=')? {
+                if self.consume_if_match(b'=')? {
                     self.add_token_automatically(token::TokenTypes::GreaterEqual)
                 } else {
                     self.add_token_automatically(token::TokenTypes::Greater)
@@ -243,7 +277,7 @@ impl Lexer {
             }
 
             b'!' => {
-                if self.advance_if_match(b'=')? {
+                if self.consume_if_match(b'=')? {
                     self.add_token_automatically(token::TokenTypes::NotEqual)
                 } else {
                     self.add_token_automatically(token::TokenTypes::Not)
@@ -251,7 +285,7 @@ impl Lexer {
             }
 
             b'&' => {
-                if self.advance_if_match(b'&')? {
+                if self.consume_if_match(b'&')? {
                     self.add_token_automatically(token::TokenTypes::And)
                 } else {
                     self.add_token_automatically(token::TokenTypes::Ampersand)
@@ -259,7 +293,7 @@ impl Lexer {
             }
 
             b'|' => {
-                if self.advance_if_match(b'|')? {
+                if self.consume_if_match(b'|')? {
                     self.add_token_automatically(token::TokenTypes::Or)
                 } else {
                     self.add_token_automatically(token::TokenTypes::Pipe)
@@ -268,9 +302,9 @@ impl Lexer {
 
             // operators
             b'+' => {
-                if self.advance_if_match(b'+')? {
+                if self.consume_if_match(b'+')? {
                     self.add_token_automatically(token::TokenTypes::PlusPlus)
-                } else if self.advance_if_match(b'=')? {
+                } else if self.consume_if_match(b'=')? {
                     self.add_token_automatically(token::TokenTypes::PlusEqual)
                 } else {
                     self.add_token_automatically(token::TokenTypes::Plus)
@@ -278,9 +312,9 @@ impl Lexer {
             }
 
             b'-' => {
-                if self.advance_if_match(b'-')? {
+                if self.consume_if_match(b'-')? {
                     self.add_token_automatically(token::TokenTypes::MinusMinus)
-                } else if self.advance_if_match(b'=')? {
+                } else if self.consume_if_match(b'=')? {
                     self.add_token_automatically(token::TokenTypes::MinusEqual)
                 } else {
                     self.add_token_automatically(token::TokenTypes::Minus)
@@ -288,7 +322,7 @@ impl Lexer {
             }
 
             b'*' => {
-                if self.advance_if_match(b'=')? {
+                if self.consume_if_match(b'=')? {
                     self.add_token_automatically(token::TokenTypes::AsteriskEqual)
                 } else {
                     self.add_token_automatically(token::TokenTypes::Asterisk)
@@ -296,7 +330,7 @@ impl Lexer {
             }
 
             b'/' => {
-                if self.advance_if_match(b'=')? {
+                if self.consume_if_match(b'=')? {
                     self.add_token_automatically(token::TokenTypes::SlashEqual)
                 } else {
                     self.add_token_automatically(token::TokenTypes::Slash)
@@ -304,7 +338,7 @@ impl Lexer {
             }
 
             b'%' => {
-                if self.advance_if_match(b'=')? {
+                if self.consume_if_match(b'=')? {
                     self.add_token_automatically(token::TokenTypes::PercentEqual)
                 } else {
                     self.add_token_automatically(token::TokenTypes::Percent)
@@ -322,7 +356,7 @@ impl Lexer {
 
             b'\t' => {
                 while self.peek() == Some(b'\t') {
-                    self.advance()?;
+                    self.consume()?;
                 }
 
                 // self.add_token_automatically(token::TokenTypes::Whitespace)?
@@ -330,7 +364,7 @@ impl Lexer {
 
             b' ' => {
                 while self.peek() == Some(b' ') {
-                    self.advance()?;
+                    self.consume()?;
                 }
 
                 // self.add_token_automatically(token::TokenTypes::Whitespace)?
@@ -348,7 +382,7 @@ impl Lexer {
                         // if c exists, check if it is alphanumeric or '_'
                         .is_some_and(|c| c.is_ascii_alphanumeric() || c == b'_')
                     {
-                        self.advance()?;
+                        self.consume()?;
                     }
                     self.add_token_automatically(token::TokenTypes::Identifier);
                 // handle numbers
@@ -373,7 +407,7 @@ impl Lexer {
                 self.line += 1;
             }
 
-            self.advance()?;
+            self.consume()?;
         }
 
         // if advancing has ended because of 'is_at_end()' being true, return error early
@@ -382,7 +416,7 @@ impl Lexer {
         }
 
         // go past the ending double quote as it has been processed
-        self.advance()?;
+        self.consume()?;
 
         // if 'get_source_string' is not None, add the token with appropriate lexeme
         self.add_token_manually(
@@ -399,7 +433,7 @@ impl Lexer {
     fn handle_number_literal(&mut self) -> Result<(), Error> {
         // check whether 'peek' is Some character. If it exists, check if it is an ascii digit
         while self.peek().is_some_and(|c| c.is_ascii_digit()) {
-            self.advance()?;
+            self.consume()?;
         }
 
         if !self.is_at_end()
@@ -409,10 +443,10 @@ impl Lexer {
             && self.peek_next().map_or(false, |c| c.is_ascii_digit())
         {
             // skip the dot
-            self.advance()?;
+            self.consume()?;
 
             while self.peek().is_some_and(|c| c.is_ascii_digit()) {
-                self.advance()?;
+                self.consume()?;
             }
 
             self.add_token_automatically(token::TokenTypes::Float);
@@ -425,9 +459,9 @@ impl Lexer {
 
     fn handle_character_literal(&mut self) -> Result<(), Error> {
         if self.peek() == Some(b'\\') {
-            self.advance()?; // go past the '\'
+            self.consume()?; // go past the '\'
 
-            let escape_char = self.peek_and_advance()?;
+            let escape_char = self.peek_and_consume()?;
 
             match escape_char {
                 b'n' | b't' | b'r' | b'\\' | b'\'' | b'"' | b'0' => {}
@@ -440,13 +474,13 @@ impl Lexer {
             }
         } else {
             // regular single character: consume it
-            self.peek_and_advance()?;
+            self.peek_and_consume()?;
         }
 
         if self.peek() != Some(b'\'') {
             return Err(Error::UnterminatedCharLiteral { line: self.line });
         }
-        self.advance()?; // go past end '
+        self.consume()?; // go past end '
 
         self.add_token_manually(
             token::TokenTypes::Char,

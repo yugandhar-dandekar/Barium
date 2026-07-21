@@ -1,6 +1,4 @@
-#![allow(unused_imports)]
 use std::env;
-use std::path::Path;
 use std::time::Instant;
 
 mod lexer;

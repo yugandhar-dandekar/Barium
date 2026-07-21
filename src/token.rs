@@ -72,6 +72,8 @@ pub enum TokenTypes {
 pub struct Token {
     pub token_type: TokenTypes,
     pub start: u32,
+
+    // lexeme information
     pub end: u32,
     pub line: u32,
 }

@@ -21,8 +21,12 @@ fn main() {
     };
     let elapsed = start.elapsed();
 
-    for token in tokens {
-        println!("{:?}", token.token_type);
+    for token in &tokens {
+        let start = token.start as usize;
+        let end = token.end as usize;
+        let lexeme = String::from_utf8_lossy(&lexer.source[start..end]);
+
+        println!("Token({:?} {:?})", token.token_type, lexeme);
     }
 
     println!("Elapsed: {:?}", elapsed);

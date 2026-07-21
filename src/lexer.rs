@@ -385,7 +385,12 @@ impl Lexer {
         self.advance()?;
 
         // if 'get_source_string' is not None, add the token with appropriate lexeme
-        self.add_token_automatically(token::TokenTypes::CharString);
+        self.add_token_manually(
+            token::TokenTypes::CharString,
+            self.start + 1,
+            self.current - 1,
+            self.line,
+        );
 
         Ok(())
     }
@@ -443,7 +448,12 @@ impl Lexer {
         }
         self.advance()?; // go past end '
 
-        self.add_token_automatically(token::TokenTypes::Char);
+        self.add_token_manually(
+            token::TokenTypes::Char,
+            self.start + 1,
+            self.current - 1,
+            self.line,
+        );
 
         Ok(())
     }

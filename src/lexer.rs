@@ -1,14 +1,46 @@
 use crate::token::{self, Token};
 use std::path::Path;
 
-// allow printing
-#[derive(Debug)]
 pub enum Error {
-    FailedToAdvance,
-    FailedToIndexSource,
-    UnexpectedEOF,
-    ErroneousEscapeCharacter,
-    UnterminatedCharLiteral,
+    FailedToAdvance { line: usize, current: usize },
+    FailedToIndexSource { line: usize, current: usize },
+    UnexpectedEOF { line: usize },
+    ErroneousEscapeCharacter { line: usize, found: u8 },
+    UnterminatedCharLiteral { line: usize },
+}
+
+use std::fmt;
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Error::FailedToAdvance { line, current } => {
+                write!(
+                    f,
+                    "line {line}: failed to advance lexer past position {current}"
+                )
+            }
+            Error::FailedToIndexSource { line, current } => {
+                write!(
+                    f,
+                    "line {line}: failed to read source at position {current}"
+                )
+            }
+            Error::UnexpectedEOF { line } => {
+                write!(f, "line {line}: unexpected end of file")
+            }
+            Error::ErroneousEscapeCharacter { line, found } => {
+                write!(
+                    f,
+                    "line {line}: invalid escape character '\\{}' in character literal",
+                    *found as char
+                )
+            }
+            Error::UnterminatedCharLiteral { line } => {
+                write!(f, "line {line}: character literal is missing a closing '")
+            }
+        }
+    }
 }
 
 pub struct Lexer {
@@ -97,7 +129,10 @@ impl Lexer {
 
         // allow advancing to the end but not past the end
         if self.index_is_at_end(new_index) && new_index != self.source.len() {
-            Err(Error::FailedToAdvance)
+            Err(Error::FailedToAdvance {
+                line: self.line,
+                current: self.current,
+            })
         } else {
             self.current = new_index;
             Ok(())
@@ -115,9 +150,12 @@ impl Lexer {
             // if not ok
 
             if self.is_at_end() {
-                Error::UnexpectedEOF // if the code has already reached the end
+                Error::UnexpectedEOF { line: self.line } // if the code has already reached the end
             } else {
-                Error::FailedToIndexSource // if the code fails to peek
+                Error::FailedToIndexSource {
+                    line: self.line,
+                    current: self.current,
+                } // if the code fails to peek
             }
         })?; // if not ok break and return error
 
@@ -340,7 +378,7 @@ impl Lexer {
 
         // if advancing has ended because of 'is_at_end()' being true, return error early
         if self.is_at_end() {
-            return Err(Error::UnexpectedEOF);
+            return Err(Error::UnexpectedEOF { line: self.line });
         }
 
         // go past the ending double quote as it has been processed
@@ -388,7 +426,12 @@ impl Lexer {
 
             match escape_char {
                 b'n' | b't' | b'r' | b'\\' | b'\'' | b'"' | b'0' => {}
-                _ => return Err(Error::ErroneousEscapeCharacter),
+                _ => {
+                    return Err(Error::ErroneousEscapeCharacter {
+                        line: self.line,
+                        found: escape_char,
+                    });
+                }
             }
         } else {
             // regular single character: consume it
@@ -396,7 +439,7 @@ impl Lexer {
         }
 
         if self.peek() != Some(b'\'') {
-            return Err(Error::UnterminatedCharLiteral);
+            return Err(Error::UnterminatedCharLiteral { line: self.line });
         }
         self.advance()?; // go past end '
 

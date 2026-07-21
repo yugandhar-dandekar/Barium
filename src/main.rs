@@ -1,3 +1,4 @@
+use colored::Colorize;
 use std::env;
 use std::time::Instant;
 
@@ -11,7 +12,13 @@ fn main() {
     let mut lexer = lexer::Lexer::new(source);
 
     let start = Instant::now();
-    let tokens = lexer.lex_text().unwrap();
+    let tokens = match lexer.lex_text() {
+        Ok(tokens) => tokens,
+        Err(e) => {
+            eprintln!("{}", format!("Error while lexing: {e}").red());
+            std::process::exit(1);
+        }
+    };
     let elapsed = start.elapsed();
 
     for token in tokens {

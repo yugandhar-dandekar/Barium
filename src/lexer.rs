@@ -1,4 +1,5 @@
 use crate::token::{self, Token};
+use std::fmt;
 use std::path::Path;
 
 pub enum Error {
@@ -8,8 +9,6 @@ pub enum Error {
     ErroneousEscapeCharacter { line: usize, found: u8 },
     UnterminatedCharLiteral { line: usize },
 }
-
-use std::fmt;
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

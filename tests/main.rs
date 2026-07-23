@@ -1,11 +1,10 @@
 use colored::Colorize;
-use std::env;
 use std::time::Instant;
 
 use barium_lexer::Lexer;
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
+    let args: Vec<String> = std::env::args().collect();
     if args.len() != 2 {
         eprintln!("Expected 1 file path argument");
         std::process::exit(1);

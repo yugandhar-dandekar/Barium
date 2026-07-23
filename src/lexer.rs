@@ -89,7 +89,7 @@ impl Lexer {
     ///
     /// # Example
     ///
-    /// ```
+    /// ```ignore
     /// // self.source = "test"
     ///
     /// assert_eq!(self.index_is_at_end(4), true);
@@ -103,7 +103,7 @@ impl Lexer {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```ignore
     /// // self.source = "test"
     ///
     /// self.consume_n(3);
@@ -118,7 +118,7 @@ impl Lexer {
     ///
     /// # Example
     ///
-    /// ```
+    /// ```ignore
     /// // self.source = "test"
     ///
     /// assert_eq!(self.peek(), Some(b't'));
@@ -138,7 +138,7 @@ impl Lexer {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```ignore
     /// // self.source = "test"
     ///
     /// assert_eq!(self.peek_next(), Some(b'e'));
@@ -152,7 +152,7 @@ impl Lexer {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```ignore
     /// // self.source = "test"
     ///
     /// self.consume_n(2); // increases `self.current` by 2, now points from 't' to 's'

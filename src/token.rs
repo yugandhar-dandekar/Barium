@@ -67,6 +67,9 @@ pub enum TokenTypes {
     And, // &&
     Or,  // ||
     Not, // !
+
+    //
+    RArrow,
 }
 
 pub struct Token {

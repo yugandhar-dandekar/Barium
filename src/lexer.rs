@@ -315,6 +315,8 @@ impl Lexer {
                     self.add_token_automatically(token::TokenTypes::MinusMinus)
                 } else if self.consume_if_match(b'=')? {
                     self.add_token_automatically(token::TokenTypes::MinusEqual)
+                } else if self.consume_if_match(b'>')? {
+                    self.add_token_automatically(token::TokenTypes::RArrow)
                 } else {
                     self.add_token_automatically(token::TokenTypes::Minus)
                 }

@@ -254,6 +254,8 @@ impl Lexer {
             b'=' => {
                 if self.consume_if_match(b'=')? {
                     self.add_token_automatically(token::TokenTypes::EqEqual)
+                } else if self.consume_if_match(b'>')? {
+                    self.add_token_automatically(token::TokenTypes::RArrowThick)
                 } else {
                     self.add_token_automatically(token::TokenTypes::Equal)
                 }
@@ -316,7 +318,7 @@ impl Lexer {
                 } else if self.consume_if_match(b'=')? {
                     self.add_token_automatically(token::TokenTypes::MinusEqual)
                 } else if self.consume_if_match(b'>')? {
-                    self.add_token_automatically(token::TokenTypes::RArrow)
+                    self.add_token_automatically(token::TokenTypes::RArrowThin)
                 } else {
                     self.add_token_automatically(token::TokenTypes::Minus)
                 }

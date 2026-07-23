@@ -69,7 +69,8 @@ pub enum TokenTypes {
     Not, // !
 
     //
-    RArrow,
+    RArrowThin,
+    RArrowThick,
 }
 
 pub struct Token {

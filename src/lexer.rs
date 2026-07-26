@@ -11,6 +11,7 @@ pub enum Error {
     UnterminatedCharLiteral { line: usize },
 }
 
+// for printing of Error
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -44,7 +45,7 @@ impl fmt::Display for Error {
 }
 
 pub struct Lexer {
-    pub source: Vec<u8>,
+    source: Vec<u8>,
     tokens: Vec<Token>,
 
     start: usize,

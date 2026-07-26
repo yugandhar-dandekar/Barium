@@ -1,12 +1,21 @@
 [package]
-name = "barium-lexer"
+name = "Barium-lexer"
 version = "0.1.0"
 edition = "2024"
 
+keywords = ["lexer", "token"]
+description = "Simple lexer written in Rust"
+readme = "README.md"
+
 [dependencies]
-colored = "2"
+colored = "3.1.1"
+
+[lib]
+name="barium"
+crate-type = ["rlib"]
+
 
 [[test]]
 name = "main"
-path = "tests/main.rs"
-harness = false
+path = ".ignore/tests/main.rs"
+harness = true

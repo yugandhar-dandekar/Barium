@@ -1,4 +1,5 @@
 use crate::token::{self, Token};
+use colored::Colorize;
 use std::fmt;
 use std::path::Path;
 
@@ -18,36 +19,53 @@ impl fmt::Display for Error {
             Error::FailedToAdvance { line, current } => {
                 write!(
                     f,
-                    "line {line}: failed to advance lexer past position {current}"
+                    "{}",
+                    format!("line {line}: failed to advance lexer past position {current}")
+                        .bright_red()
                 )
             }
             Error::FailedToIndexSource { line, current } => {
                 write!(
                     f,
-                    "line {line}: failed to read source at position {current}"
+                    "{}",
+                    format!("line {line}: failed to read source at position {current}")
+                        .bright_red()
                 )
             }
-            Error::UnexpectedEOF { line } => {
-                write!(f, "line {line}: unexpected end of file")
-            }
+            Error::UnexpectedEOF { line } => write!(
+                f,
+                "{}",
+                format!("line {line}: unexpected end of file").bright_red()
+            ),
             Error::ErroneousEscapeCharacter { line, found } => {
                 write!(
                     f,
-                    "line {line}: invalid escape character '\\{}' in character literal",
-                    *found as char
+                    "{}",
+                    format!(
+                        "line {line}: invalid escape character '\\{}' in character literal",
+                        *found as char
+                    )
+                    .bright_red()
                 )
             }
             Error::UnterminatedCharLiteral { line } => {
-                write!(f, "line {line}: character literal is missing a closing '")
+                write!(
+                    f,
+                    "{}",
+                    format!("line {line}: character literal is missing a closing '").bright_red()
+                )
             }
         }
     }
 }
 
 pub struct Lexer {
+    // assume source is UTF-8 encoded
     source: Vec<u8>,
+
     tokens: Vec<Token>,
 
+    // pointers to the start and end of each token
     start: usize,
     current: usize,
 
@@ -55,6 +73,16 @@ pub struct Lexer {
 }
 
 impl Lexer {
+    /// Default constructor for `Lexer`
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use barium::Lexer;
+    ///
+    /// let mut lexer = Lexer::new(b"hello".into());
+    /// let tokens = lexer.lex_text();
+    /// ```
     #[allow(dead_code)]
     pub fn new(source: Vec<u8>) -> Self {
         let source_len = source.len();
@@ -70,54 +98,102 @@ impl Lexer {
         }
     }
 
+    /// Constructs Lexer from `path`
+    ///
+    /// Attempts to read `path`. If failed, the method will return [`std::io::Error`]
+    /// early
     #[allow(dead_code)]
     pub fn from_file(path: &Path) -> Result<Self, std::io::Error> {
         let source = std::fs::read(path)?;
+
         Ok(Self::new(source))
     }
 
+    /// Checks if `index` provided is at the end of the file
+    ///
+    /// `index` will have reached the end when `index` == the length of the
+    /// source, this is because the `current` attribute in [`Lexer`] always
+    /// points to the next character being processed which is when it is 1
+    /// more than the index of the last character.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// self.source = b"test".into();
+    ///
+    /// // equal to the length of "test" so reached the end
+    /// assert_eq!(self.index_is_at_end(4), true);
+    ///
+    /// // greater than the length of "test" so gone past the end
+    /// assert_eq!(self.index_is_at_end(10), true);
+    ///
+    /// // not reached the end
+    /// assert_eq!(self.index_is_at_end(3), false);
+    /// ```
     fn index_is_at_end(&self, index: usize) -> bool {
         index >= self.source.len()
     }
 
+    /// Checks if `current` attribute in Lexer is at the end
+    ///
+    /// Wrapper method for Lexer::index_is_at_end
     fn is_at_end(&self) -> bool {
         self.index_is_at_end(self.current)
     }
 
+    /// Peeks `source` at `index`
+    ///
+    /// returns [`Option<u8>`]
     #[must_use]
     fn peek_index(&self, index: usize) -> Option<u8> {
         self.source.get(index).copied()
     }
 
+    /// Peeks `source` at `current` index
+    ///
+    /// returns [`Option<u8>`]
     #[must_use]
     fn peek(&self) -> Option<u8> {
         self.peek_index(self.current)
     }
 
+    /// Peeks `source` at `current + 1` index
+    ///
+    /// returns [`Option<u8>`]
     #[must_use]
     fn peek_next(&self) -> Option<u8> {
         self.peek_index(self.current + 1)
     }
 
+    /// Consumes `n` characters in `source`
+    ///
+    /// increments `current` index by `n`
     fn consume_n(&mut self, n: usize) -> Result<(), Error> {
         let new_index = self.current + n;
 
-        if self.index_is_at_end(new_index) && new_index != self.source.len() {
+        // only allow consuming `n` if the index isn't at the end or exactly
+        // equal to the length of source so that all characters can be
+        // consumed
+        if !self.index_is_at_end(new_index) || new_index == self.source.len() {
+            self.current = new_index;
+            Ok(())
+        } else {
             Err(Error::FailedToAdvance {
                 line: self.line,
                 current: self.current,
             })
-        } else {
-            self.current = new_index;
-            Ok(())
         }
     }
 
+    /// Consumes 1 character in `source`
     fn consume(&mut self) -> Result<(), Error> {
         self.consume_n(1)
     }
 
     fn peek_and_consume(&mut self) -> Result<u8, Error> {
+        // peek the current character. If the peek fails, it could either be
+        // because `current` has reached the end of `source` or because of a
+        // failure to peek, handle that error here
         let character = self.peek().ok_or({
             if self.is_at_end() {
                 Error::UnexpectedEOF { line: self.line }
@@ -129,15 +205,20 @@ impl Lexer {
             }
         })?;
 
+        // consume the peeked character
         self.consume()?;
 
         Ok(character)
     }
 
+    /// Pushes a token to `tokens` with parameters decided automatically
+    ///
+    /// sets `end` is set to `current`, all other parameters are the same
     fn add_token_automatically(&mut self, token_type: token::TokenTypes) {
         self.add_token_manually(token_type, self.start, self.current, self.line);
     }
 
+    /// Pushes a token to `tokens`
     fn add_token_manually(
         &mut self,
         token_type: token::TokenTypes,
@@ -154,6 +235,9 @@ impl Lexer {
 
         self.tokens.push(token);
     }
+
+    /// If the peeked character is equal to the expected, return true and advance,
+    /// else return false. If the peek fails, return an error
     fn consume_if_match(&mut self, expected: u8) -> Result<bool, Error> {
         if self.peek() == Some(expected) {
             self.consume()?;
@@ -164,6 +248,8 @@ impl Lexer {
     }
 
     fn scan(&mut self) -> Result<(), Error> {
+        // peek the current character, since its already
+        // processed, advance automatically
         let character = self.peek_and_consume()?;
 
         match character {
@@ -407,12 +493,20 @@ impl Lexer {
         Ok(())
     }
 
-    pub fn lex_text(&mut self) -> Result<Vec<Token>, Error> {
+    pub fn lex_text(&mut self) -> Vec<Token> {
         while !self.is_at_end() {
+            // set start to the current so the token start is recorded
             self.start = self.current;
-            self.scan()?;
+
+            match self.scan() {
+                Ok(()) => {}
+                Err(err) => {
+                    eprintln!("Lexing error: {}", err);
+                }
+            }
         }
 
+        // add the end of file token
         self.add_token_manually(
             token::TokenTypes::EndOfFile,
             self.current,
@@ -420,6 +514,7 @@ impl Lexer {
             self.line,
         );
 
-        Ok(std::mem::take(&mut self.tokens))
+        // take ownership of tokens
+        std::mem::take(&mut self.tokens)
     }
 }

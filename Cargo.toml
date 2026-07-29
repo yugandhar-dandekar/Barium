@@ -17,5 +17,9 @@ crate-type = ["rlib"]
 
 [[test]]
 name = "main"
-path = ".ignore/tests/main.rs"
+path = ".ignore/test.rs"
 harness = true
+
+[[bin]]
+name = "main"
+path = ".ignore/main.rs"

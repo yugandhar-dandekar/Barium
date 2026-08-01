@@ -1,61 +1,36 @@
 use crate::token::{self, Token};
-use colored::Colorize;
-use std::fmt;
 use std::path::Path;
 
-pub enum Error {
-    FailedToAdvance { line: usize, current: usize },
-    FailedToIndexSource { line: usize, current: usize },
-
-    UnexpectedEOF { line: usize },
-    ErroneousEscapeCharacter { line: usize, found: u8 },
-    UnterminatedCharLiteral { line: usize },
+#[derive(Debug)]
+pub enum LexerError {
+    Internal(InternalError),
+    Source(SourceError),
 }
 
-// for printing of Error
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Error::FailedToAdvance { line, current } => {
-                write!(
-                    f,
-                    "{}",
-                    format!("line {line}: failed to advance lexer past position {current}")
-                        .bright_red()
-                )
-            }
-            Error::FailedToIndexSource { line, current } => {
-                write!(
-                    f,
-                    "{}",
-                    format!("line {line}: failed to read source at position {current}")
-                        .bright_red()
-                )
-            }
-            Error::UnexpectedEOF { line } => write!(
-                f,
-                "{}",
-                format!("line {line}: unexpected end of file").bright_red()
-            ),
-            Error::ErroneousEscapeCharacter { line, found } => {
-                write!(
-                    f,
-                    "{}",
-                    format!(
-                        "line {line}: invalid escape character '\\{}' in character literal",
-                        *found as char
-                    )
-                    .bright_red()
-                )
-            }
-            Error::UnterminatedCharLiteral { line } => {
-                write!(
-                    f,
-                    "{}",
-                    format!("line {line}: character literal is missing a closing '").bright_red()
-                )
-            }
-        }
+#[derive(Debug)]
+pub enum InternalError {
+    FailedToAdvance { line: usize, current: usize },
+    FailedToIndexSource { line: usize, current: usize },
+}
+
+#[derive(Debug)]
+pub enum SourceError {
+    UnexpectedEOF { line: usize, current: usize },
+
+    UnterminatedStringLiteral { line: usize, current: usize },
+    UnterminatedCharLiteral { line: usize, current: usize },
+    BadEscapeCharacter { line: usize, current: usize },
+}
+
+impl From<InternalError> for LexerError {
+    fn from(err: InternalError) -> Self {
+        LexerError::Internal(err)
+    }
+}
+
+impl From<SourceError> for LexerError {
+    fn from(err: SourceError) -> Self {
+        LexerError::Source(err)
     }
 }
 
@@ -170,7 +145,7 @@ impl Lexer {
     /// Consumes `n` characters in `source`
     ///
     /// increments `current` index by `n`
-    fn consume_n(&mut self, n: usize) -> Result<(), Error> {
+    fn consume_n(&mut self, n: usize) -> Result<(), InternalError> {
         let new_index = self.current + n;
 
         // only allow consuming `n` if the index isn't at the end or exactly
@@ -180,7 +155,7 @@ impl Lexer {
             self.current = new_index;
             Ok(())
         } else {
-            Err(Error::FailedToAdvance {
+            Err(InternalError::FailedToAdvance {
                 line: self.line,
                 current: self.current,
             })
@@ -188,23 +163,17 @@ impl Lexer {
     }
 
     /// Consumes 1 character in `source`
-    fn consume(&mut self) -> Result<(), Error> {
+    fn consume(&mut self) -> Result<(), InternalError> {
         self.consume_n(1)
     }
 
-    fn peek_and_consume(&mut self) -> Result<u8, Error> {
+    fn peek_and_consume(&mut self) -> Result<u8, InternalError> {
         // peek the current character. If the peek fails, it could either be
         // because `current` has reached the end of `source` or because of a
         // failure to peek, handle that error here
-        let character = self.peek().ok_or({
-            if self.is_at_end() {
-                Error::UnexpectedEOF { line: self.line }
-            } else {
-                Error::FailedToIndexSource {
-                    line: self.line,
-                    current: self.current,
-                }
-            }
+        let character = self.peek().ok_or(InternalError::FailedToIndexSource {
+            line: (self.line),
+            current: (self.current),
         })?;
 
         // consume the peeked character
@@ -240,7 +209,7 @@ impl Lexer {
 
     /// If the peeked character is equal to the expected, return true and advance,
     /// else return false. If the peek fails, return an error
-    fn consume_if_match(&mut self, expected: u8) -> Result<bool, Error> {
+    fn consume_if_match(&mut self, expected: u8) -> Result<bool, InternalError> {
         if self.peek() == Some(expected) {
             self.consume()?;
             Ok(true)
@@ -249,7 +218,7 @@ impl Lexer {
         }
     }
 
-    fn scan(&mut self) -> Result<(), Error> {
+    fn scan(&mut self) -> Result<(), LexerError> {
         // peek the current character, since its already
         // processed, advance automatically
         let character = self.peek_and_consume()?;
@@ -413,7 +382,7 @@ impl Lexer {
         Ok(())
     }
 
-    fn handle_string_literal(&mut self) -> Result<(), Error> {
+    fn handle_string_literal(&mut self) -> Result<(), LexerError> {
         while self.peek() != Some(b'"') && !self.is_at_end() {
             if self.peek() == Some(b'\n') {
                 self.line += 1;
@@ -423,7 +392,10 @@ impl Lexer {
         }
 
         if self.is_at_end() {
-            return Err(Error::UnexpectedEOF { line: self.line });
+            return Err(LexerError::Source(SourceError::UnexpectedEOF {
+                line: self.line,
+                current: self.current,
+            }));
         }
 
         self.consume()?;
@@ -438,7 +410,7 @@ impl Lexer {
         Ok(())
     }
 
-    fn handle_number_literal(&mut self) -> Result<(), Error> {
+    fn handle_number_literal(&mut self) -> Result<(), LexerError> {
         while self.peek().is_some_and(|c| c.is_ascii_digit()) {
             self.consume()?;
         }
@@ -461,7 +433,7 @@ impl Lexer {
         Ok(())
     }
 
-    fn handle_character_literal(&mut self) -> Result<(), Error> {
+    fn handle_character_literal(&mut self) -> Result<(), LexerError> {
         if self.peek() == Some(b'\\') {
             self.consume()?;
 
@@ -470,10 +442,10 @@ impl Lexer {
             match escape_char {
                 b'n' | b't' | b'r' | b'\\' | b'\'' | b'"' | b'0' => {}
                 _ => {
-                    return Err(Error::ErroneousEscapeCharacter {
+                    return Err(LexerError::Source(SourceError::BadEscapeCharacter {
                         line: self.line,
-                        found: escape_char,
-                    });
+                        current: self.current,
+                    }));
                 }
             }
         } else {
@@ -481,7 +453,10 @@ impl Lexer {
         }
 
         if self.peek() != Some(b'\'') {
-            return Err(Error::UnterminatedCharLiteral { line: self.line });
+            return Err(LexerError::Source(SourceError::UnterminatedCharLiteral {
+                line: self.line,
+                current: self.current,
+            }));
         }
         self.consume()?;
 
@@ -503,7 +478,7 @@ impl Lexer {
             match self.scan() {
                 Ok(()) => {}
                 Err(err) => {
-                    eprintln!("Lexing error: {}", err);
+                    eprintln!("Lexing error: {:?}", err);
                 }
             }
         }

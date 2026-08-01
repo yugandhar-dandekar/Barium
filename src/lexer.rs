@@ -34,6 +34,8 @@ impl From<SourceError> for LexerError {
     }
 }
 
+pub type LResult<T> = core::result::Result<T, LexerError>;
+
 pub struct Lexer {
     // assume source is UTF-8 encoded
     source: Vec<u8>,
@@ -145,7 +147,7 @@ impl Lexer {
     /// Consumes `n` characters in `source`
     ///
     /// increments `current` index by `n`
-    fn consume_n(&mut self, n: usize) -> Result<(), InternalError> {
+    fn consume_n(&mut self, n: usize) -> LResult<()> {
         let new_index = self.current + n;
 
         // only allow consuming `n` if the index isn't at the end or exactly
@@ -155,19 +157,19 @@ impl Lexer {
             self.current = new_index;
             Ok(())
         } else {
-            Err(InternalError::FailedToAdvance {
+            Err(LexerError::Internal(InternalError::FailedToAdvance {
                 line: self.line,
                 current: self.current,
-            })
+            }))
         }
     }
 
     /// Consumes 1 character in `source`
-    fn consume(&mut self) -> Result<(), InternalError> {
+    fn consume(&mut self) -> LResult<()> {
         self.consume_n(1)
     }
 
-    fn peek_and_consume(&mut self) -> Result<u8, InternalError> {
+    fn peek_and_consume(&mut self) -> LResult<u8> {
         // peek the current character. If the peek fails, it could either be
         // because `current` has reached the end of `source` or because of a
         // failure to peek, handle that error here
@@ -209,7 +211,7 @@ impl Lexer {
 
     /// If the peeked character is equal to the expected, return true and advance,
     /// else return false. If the peek fails, return an error
-    fn consume_if_match(&mut self, expected: u8) -> Result<bool, InternalError> {
+    fn consume_if_match(&mut self, expected: u8) -> LResult<bool> {
         if self.peek() == Some(expected) {
             self.consume()?;
             Ok(true)
@@ -392,10 +394,10 @@ impl Lexer {
         }
 
         if self.is_at_end() {
-            return Err(LexerError::Source(SourceError::UnexpectedEOF {
+            Err(LexerError::Source(SourceError::UnexpectedEOF {
                 line: self.line,
                 current: self.current,
-            }));
+            }))?
         }
 
         self.consume()?;
@@ -410,7 +412,7 @@ impl Lexer {
         Ok(())
     }
 
-    fn handle_number_literal(&mut self) -> Result<(), LexerError> {
+    fn handle_number_literal(&mut self) -> LResult<()> {
         while self.peek().is_some_and(|c| c.is_ascii_digit()) {
             self.consume()?;
         }
@@ -433,7 +435,7 @@ impl Lexer {
         Ok(())
     }
 
-    fn handle_character_literal(&mut self) -> Result<(), LexerError> {
+    fn handle_character_literal(&mut self) -> LResult<()> {
         if self.peek() == Some(b'\\') {
             self.consume()?;
 

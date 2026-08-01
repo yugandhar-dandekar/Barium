@@ -132,8 +132,16 @@ impl Lexer {
     ///
     /// returns [`Option<u8>`]
     #[must_use]
-    fn peek(&self) -> Option<u8> {
-        self.peek_index(self.current)
+    fn peek(&self) -> LResult<u8> {
+        self.peek_index(self.current).map_or_else(
+            || {
+                Err(LexerError::Internal(InternalError::FailedToIndexSource {
+                    line: self.line,
+                    current: self.current,
+                }))
+            },
+            |c| Ok(c),
+        )
     }
 
     /// Peeks `source` at `current + 1` index
@@ -173,10 +181,7 @@ impl Lexer {
         // peek the current character. If the peek fails, it could either be
         // because `current` has reached the end of `source` or because of a
         // failure to peek, handle that error here
-        let character = self.peek().ok_or(InternalError::FailedToIndexSource {
-            line: (self.line),
-            current: (self.current),
-        })?;
+        let character = self.peek()?;
 
         // consume the peeked character
         self.consume()?;
@@ -212,7 +217,7 @@ impl Lexer {
     /// If the peeked character is equal to the expected, return true and advance,
     /// else return false. If the peek fails, return an error
     fn consume_if_match(&mut self, expected: u8) -> LResult<bool> {
-        if self.peek() == Some(expected) {
+        if self.peek()? == expected {
             self.consume()?;
             Ok(true)
         } else {
@@ -346,7 +351,7 @@ impl Lexer {
             b'\r' => {}
 
             b'\t' => {
-                while self.peek() == Some(b'\t') {
+                while self.peek()? == b'\t' {
                     self.consume()?;
                 }
 
@@ -354,7 +359,7 @@ impl Lexer {
             }
 
             b' ' => {
-                while self.peek() == Some(b' ') {
+                while self.peek()? == b' ' {
                     self.consume()?;
                 }
 
@@ -368,7 +373,7 @@ impl Lexer {
                 if character.is_ascii_alphabetic() || character == b'_' {
                     while self
                         .peek()
-                        .is_some_and(|c| c.is_ascii_alphanumeric() || c == b'_')
+                        .is_ok_and(|c| c.is_ascii_alphanumeric() || c == b'_')
                     {
                         self.consume()?;
                     }
@@ -385,8 +390,8 @@ impl Lexer {
     }
 
     fn handle_string_literal(&mut self) -> Result<(), LexerError> {
-        while self.peek() != Some(b'"') && !self.is_at_end() {
-            if self.peek() == Some(b'\n') {
+        while self.peek()? != b'"' && !self.is_at_end() {
+            if self.peek()? == b'\n' {
                 self.line += 1;
             }
 
@@ -413,17 +418,17 @@ impl Lexer {
     }
 
     fn handle_number_literal(&mut self) -> LResult<()> {
-        while self.peek().is_some_and(|c| c.is_ascii_digit()) {
+        while self.peek().is_ok_and(|c| c.is_ascii_digit()) {
             self.consume()?;
         }
 
         if !self.is_at_end()
-            && self.peek() == Some(b'.')
+            && self.peek()? == b'.'
             && self.peek_next().map_or(false, |c| c.is_ascii_digit())
         {
             self.consume()?;
 
-            while self.peek().is_some_and(|c| c.is_ascii_digit()) {
+            while self.peek().is_ok_and(|c| c.is_ascii_digit()) {
                 self.consume()?;
             }
 
@@ -436,7 +441,7 @@ impl Lexer {
     }
 
     fn handle_character_literal(&mut self) -> LResult<()> {
-        if self.peek() == Some(b'\\') {
+        if self.peek()? == b'\\' {
             self.consume()?;
 
             let escape_char = self.peek_and_consume()?;
@@ -454,7 +459,7 @@ impl Lexer {
             self.peek_and_consume()?;
         }
 
-        if self.peek() != Some(b'\'') {
+        if self.peek()? != b'\'' {
             return Err(LexerError::Source(SourceError::UnterminatedCharLiteral {
                 line: self.line,
                 current: self.current,

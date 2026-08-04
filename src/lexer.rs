@@ -1,19 +1,15 @@
 use crate::token::{self, Token};
-use std::path::Path;
 
-#[derive(Debug)]
 pub enum LexerError {
     Internal(InternalError),
     Source(SourceError),
 }
 
-#[derive(Debug)]
 pub enum InternalError {
     FailedToAdvance { line: usize, current: usize },
     FailedToIndexSource { line: usize, current: usize },
 }
 
-#[derive(Debug)]
 pub enum SourceError {
     UnexpectedEOF { line: usize, current: usize },
 
@@ -36,9 +32,10 @@ impl From<SourceError> for LexerError {
 
 pub type LResult<T> = core::result::Result<T, LexerError>;
 
-pub struct Lexer {
+pub struct Lexer<'a> {
     // assume source is UTF-8 encoded
-    source: Vec<u8>,
+    source: &'a [u8],
+    source_len: usize,
 
     tokens: Vec<Token>,
 
@@ -49,7 +46,7 @@ pub struct Lexer {
     line: usize,
 }
 
-impl Lexer {
+impl<'a> Lexer<'a> {
     /// Default constructor for `Lexer`
     ///
     /// # Example
@@ -61,11 +58,12 @@ impl Lexer {
     /// let tokens = lexer.lex_text();
     /// ```
     #[allow(dead_code)]
-    pub fn new(source: Vec<u8>) -> Self {
+    pub fn new(source: &'a Vec<u8>) -> Self {
         let source_len = source.len();
 
         Self {
             source,
+            source_len,
             // assume less than 4 bytes per token average so estimated capacity
             // is len / 3 at maximum
             tokens: Vec::with_capacity(source_len / 3),
@@ -75,17 +73,6 @@ impl Lexer {
             current: 0,
             line: 1,
         }
-    }
-
-    /// Constructs Lexer from `path`
-    ///
-    /// Attempts to read `path`. If failed, the method will return [`std::io::Error`]
-    /// early
-    #[allow(dead_code)]
-    pub fn from_file(path: &Path) -> Result<Self, std::io::Error> {
-        let source = std::fs::read(path)?;
-
-        Ok(Self::new(source))
     }
 
     /// Checks if `index` provided is at the end of the file
@@ -110,7 +97,7 @@ impl Lexer {
     /// assert_eq!(self.index_is_at_end(3), false);
     /// ```
     fn index_is_at_end(&self, index: usize) -> bool {
-        index >= self.source.len()
+        index >= self.source_len
     }
 
     /// Checks if `current` attribute in Lexer is at the end
@@ -152,16 +139,11 @@ impl Lexer {
         self.peek_index(self.current + 1)
     }
 
-    /// Consumes `n` characters in `source`
-    ///
-    /// increments `current` index by `n`
-    fn consume_n(&mut self, n: usize) -> LResult<()> {
-        let new_index = self.current + n;
+    /// Consumes 1 character in `source`
+    fn consume(&mut self) -> LResult<()> {
+        let new_index = self.current + 1;
 
-        // only allow consuming `n` if the index isn't at the end or exactly
-        // equal to the length of source so that all characters can be
-        // consumed
-        if !self.index_is_at_end(new_index) || new_index == self.source.len() {
+        if !self.index_is_at_end(new_index) || new_index == self.source_len {
             self.current = new_index;
             Ok(())
         } else {
@@ -172,9 +154,8 @@ impl Lexer {
         }
     }
 
-    /// Consumes 1 character in `source`
-    fn consume(&mut self) -> LResult<()> {
-        self.consume_n(1)
+    fn consume_unchecked(&mut self) {
+        self.current += 1;
     }
 
     fn peek_and_consume(&mut self) -> LResult<u8> {
@@ -184,7 +165,8 @@ impl Lexer {
         let character = self.peek()?;
 
         // consume the peeked character
-        self.consume()?;
+        // will only happen if not at the end
+        self.consume_unchecked();
 
         Ok(character)
     }
@@ -225,7 +207,7 @@ impl Lexer {
         }
     }
 
-    fn scan(&mut self) -> Result<(), LexerError> {
+    fn scan(&mut self) -> LResult<()> {
         // peek the current character, since its already
         // processed, advance automatically
         let character = self.peek_and_consume()?;
@@ -350,20 +332,10 @@ impl Lexer {
 
             b'\r' => {}
 
-            b'\t' => {
-                while self.peek()? == b'\t' {
-                    self.consume()?;
+            b' ' | b'\t' => {
+                while self.peek_index(self.current) == Some(character) {
+                    self.current += 1;
                 }
-
-                // self.add_token_automatically(token::TokenTypes::Whitespace)?
-            }
-
-            b' ' => {
-                while self.peek()? == b' ' {
-                    self.consume()?;
-                }
-
-                // self.add_token_automatically(token::TokenTypes::Whitespace)?
             }
 
             b'"' => self.handle_string_literal()?,
@@ -389,20 +361,27 @@ impl Lexer {
         Ok(())
     }
 
-    fn handle_string_literal(&mut self) -> Result<(), LexerError> {
-        while self.peek()? != b'"' && !self.is_at_end() {
-            if self.peek()? == b'\n' {
+    fn handle_string_literal(&mut self) -> LResult<()> {
+        loop {
+            let Some(c) = self.peek_index(self.current) else {
+                break;
+            };
+            if c == b'"' {
+                break;
+            }
+
+            if c == b'\n' {
                 self.line += 1;
             }
 
-            self.consume()?;
+            self.current += 1;
         }
 
         if self.is_at_end() {
-            Err(LexerError::Source(SourceError::UnexpectedEOF {
+            return Err(LexerError::Source(SourceError::UnterminatedStringLiteral {
                 line: self.line,
                 current: self.current,
-            }))?
+            }));
         }
 
         self.consume()?;
@@ -484,8 +463,8 @@ impl Lexer {
 
             match self.scan() {
                 Ok(()) => {}
-                Err(err) => {
-                    eprintln!("Lexing error: {:?}", err);
+                Err(_) => {
+                    // eprintln!("Lexing error: {:?}", err);
                 }
             }
         }

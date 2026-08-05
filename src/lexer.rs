@@ -30,14 +30,15 @@ impl From<SourceError> for LexerError {
     }
 }
 
-pub type LResult<T> = core::result::Result<T, LexerError>;
+pub type LexerResult<T> = core::result::Result<T, LexerError>;
+pub type TokenList = Vec<Token>;
 
 pub struct Lexer<'a> {
     // assume source is UTF-8 encoded
     source: &'a [u8],
     source_len: usize,
 
-    tokens: Vec<Token>,
+    tokens: TokenList,
 
     // pointers to the start and end of each token
     start: usize,
@@ -96,6 +97,7 @@ impl<'a> Lexer<'a> {
     /// // not reached the end
     /// assert_eq!(self.index_is_at_end(3), false);
     /// ```
+    #[inline(always)]
     fn index_is_at_end(&self, index: usize) -> bool {
         index >= self.source_len
     }
@@ -103,6 +105,7 @@ impl<'a> Lexer<'a> {
     /// Checks if `current` attribute in Lexer is at the end
     ///
     /// Wrapper method for Lexer::index_is_at_end
+    #[inline(always)]
     fn is_at_end(&self) -> bool {
         self.index_is_at_end(self.current)
     }
@@ -111,6 +114,7 @@ impl<'a> Lexer<'a> {
     ///
     /// returns [`Option<u8>`]
     #[must_use]
+    #[inline(always)]
     fn peek_index(&self, index: usize) -> Option<u8> {
         self.source.get(index).copied()
     }
@@ -119,7 +123,7 @@ impl<'a> Lexer<'a> {
     ///
     /// returns [`Option<u8>`]
     #[must_use]
-    fn peek(&self) -> LResult<u8> {
+    fn peek(&self) -> LexerResult<u8> {
         self.peek_index(self.current).map_or_else(
             || {
                 Err(LexerError::Internal(InternalError::FailedToIndexSource {
@@ -135,12 +139,13 @@ impl<'a> Lexer<'a> {
     ///
     /// returns [`Option<u8>`]
     #[must_use]
+    #[inline(always)]
     fn peek_next(&self) -> Option<u8> {
         self.peek_index(self.current + 1)
     }
 
     /// Consumes 1 character in `source`
-    fn consume(&mut self) -> LResult<()> {
+    fn consume(&mut self) -> LexerResult<()> {
         let new_index = self.current + 1;
 
         if !self.index_is_at_end(new_index) || new_index == self.source_len {
@@ -154,11 +159,12 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    #[inline(always)]
     fn consume_unchecked(&mut self) {
         self.current += 1;
     }
 
-    fn peek_and_consume(&mut self) -> LResult<u8> {
+    fn peek_and_consume(&mut self) -> LexerResult<u8> {
         // peek the current character. If the peek fails, it could either be
         // because `current` has reached the end of `source` or because of a
         // failure to peek, handle that error here
@@ -198,7 +204,8 @@ impl<'a> Lexer<'a> {
 
     /// If the peeked character is equal to the expected, return true and advance,
     /// else return false. If the peek fails, return an error
-    fn consume_if_match(&mut self, expected: u8) -> LResult<bool> {
+    #[inline(always)]
+    fn consume_if_match(&mut self, expected: u8) -> LexerResult<bool> {
         if self.peek()? == expected {
             self.consume()?;
             Ok(true)
@@ -207,7 +214,7 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn scan(&mut self) -> LResult<()> {
+    fn scan(&mut self) -> LexerResult<()> {
         // peek the current character, since its already
         // processed, advance automatically
         let character = self.peek_and_consume()?;
@@ -361,7 +368,7 @@ impl<'a> Lexer<'a> {
         Ok(())
     }
 
-    fn handle_string_literal(&mut self) -> LResult<()> {
+    fn handle_string_literal(&mut self) -> LexerResult<()> {
         loop {
             let Some(c) = self.peek_index(self.current) else {
                 break;
@@ -396,7 +403,7 @@ impl<'a> Lexer<'a> {
         Ok(())
     }
 
-    fn handle_number_literal(&mut self) -> LResult<()> {
+    fn handle_number_literal(&mut self) -> LexerResult<()> {
         while self.peek().is_ok_and(|c| c.is_ascii_digit()) {
             self.consume()?;
         }
@@ -419,7 +426,7 @@ impl<'a> Lexer<'a> {
         Ok(())
     }
 
-    fn handle_character_literal(&mut self) -> LResult<()> {
+    fn handle_character_literal(&mut self) -> LexerResult<()> {
         if self.peek()? == b'\\' {
             self.consume()?;
 
@@ -456,7 +463,7 @@ impl<'a> Lexer<'a> {
         Ok(())
     }
 
-    pub fn lex_text(&mut self) -> Vec<Token> {
+    pub fn lex_text(&mut self) -> TokenList {
         while !self.is_at_end() {
             // set start to the current so the token start is recorded
             self.start = self.current;

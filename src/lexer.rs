@@ -1,15 +1,18 @@
 use crate::token::{self, Token};
 
+#[derive(Debug)]
 pub enum LexerError {
     Internal(InternalError),
     Source(SourceError),
 }
 
+#[derive(Debug)]
 pub enum InternalError {
     FailedToAdvance { line: usize, current: usize },
     FailedToIndexSource { line: usize, current: usize },
 }
 
+#[derive(Debug)]
 pub enum SourceError {
     UnexpectedEOF { line: usize, current: usize },
 
@@ -144,37 +147,10 @@ impl<'a> Lexer<'a> {
         self.peek_index(self.current + 1)
     }
 
-    /// Consumes 1 character in `source`
-    fn consume(&mut self) -> LexerResult<()> {
-        let new_index = self.current + 1;
-
-        if !self.index_is_at_end(new_index) || new_index == self.source_len {
-            self.current = new_index;
-            Ok(())
-        } else {
-            Err(LexerError::Internal(InternalError::FailedToAdvance {
-                line: self.line,
-                current: self.current,
-            }))
-        }
-    }
-
+    /// Unsafe consumption
     #[inline(always)]
     fn consume_unchecked(&mut self) {
         self.current += 1;
-    }
-
-    fn peek_and_consume(&mut self) -> LexerResult<u8> {
-        // peek the current character. If the peek fails, it could either be
-        // because `current` has reached the end of `source` or because of a
-        // failure to peek, handle that error here
-        let character = self.peek()?;
-
-        // consume the peeked character
-        // will only happen if not at the end
-        self.consume_unchecked();
-
-        Ok(character)
     }
 
     /// Pushes a token to `tokens` with parameters decided automatically
@@ -192,32 +168,32 @@ impl<'a> Lexer<'a> {
         end: usize,
         line: usize,
     ) {
-        let token = Token {
+        self.tokens.push(Token {
             token_type,
             start: start as u32,
             end: end as u32,
             line: line as u32,
-        };
-
-        self.tokens.push(token);
+        });
     }
 
     /// If the peeked character is equal to the expected, return true and advance,
     /// else return false. If the peek fails, return an error
     #[inline(always)]
-    fn consume_if_match(&mut self, expected: u8) -> LexerResult<bool> {
-        if self.peek()? == expected {
-            self.consume()?;
-            Ok(true)
+    fn consume_if_match(&mut self, expected: u8) -> bool {
+        if self.peek().is_ok_and(|c| c == expected) {
+            self.consume_unchecked();
+            true
         } else {
-            Ok(false)
+            false
         }
     }
 
     fn scan(&mut self) -> LexerResult<()> {
         // peek the current character, since its already
         // processed, advance automatically
-        let character = self.peek_and_consume()?;
+        let character = self.peek()?;
+
+        self.consume_unchecked();
 
         match character {
             b')' => self.add_token_automatically(token::TokenTypes::RParenthesis),
@@ -237,9 +213,9 @@ impl<'a> Lexer<'a> {
             b'~' => self.add_token_automatically(token::TokenTypes::Tilde),
 
             b'=' => {
-                if self.consume_if_match(b'=')? {
+                if self.consume_if_match(b'=') {
                     self.add_token_automatically(token::TokenTypes::EqEqual)
-                } else if self.consume_if_match(b'>')? {
+                } else if self.consume_if_match(b'>') {
                     self.add_token_automatically(token::TokenTypes::RArrowThick)
                 } else {
                     self.add_token_automatically(token::TokenTypes::Equal)
@@ -247,7 +223,7 @@ impl<'a> Lexer<'a> {
             }
 
             b'<' => {
-                if self.consume_if_match(b'=')? {
+                if self.consume_if_match(b'=') {
                     self.add_token_automatically(token::TokenTypes::LessEqual)
                 } else {
                     self.add_token_automatically(token::TokenTypes::Less)
@@ -255,7 +231,7 @@ impl<'a> Lexer<'a> {
             }
 
             b'>' => {
-                if self.consume_if_match(b'=')? {
+                if self.consume_if_match(b'=') {
                     self.add_token_automatically(token::TokenTypes::GreaterEqual)
                 } else {
                     self.add_token_automatically(token::TokenTypes::Greater)
@@ -263,7 +239,7 @@ impl<'a> Lexer<'a> {
             }
 
             b'!' => {
-                if self.consume_if_match(b'=')? {
+                if self.consume_if_match(b'=') {
                     self.add_token_automatically(token::TokenTypes::NotEqual)
                 } else {
                     self.add_token_automatically(token::TokenTypes::Not)
@@ -271,7 +247,7 @@ impl<'a> Lexer<'a> {
             }
 
             b'&' => {
-                if self.consume_if_match(b'&')? {
+                if self.consume_if_match(b'&') {
                     self.add_token_automatically(token::TokenTypes::And)
                 } else {
                     self.add_token_automatically(token::TokenTypes::Ampersand)
@@ -279,7 +255,7 @@ impl<'a> Lexer<'a> {
             }
 
             b'|' => {
-                if self.consume_if_match(b'|')? {
+                if self.consume_if_match(b'|') {
                     self.add_token_automatically(token::TokenTypes::Or)
                 } else {
                     self.add_token_automatically(token::TokenTypes::Pipe)
@@ -287,9 +263,9 @@ impl<'a> Lexer<'a> {
             }
 
             b'+' => {
-                if self.consume_if_match(b'+')? {
+                if self.consume_if_match(b'+') {
                     self.add_token_automatically(token::TokenTypes::PlusPlus)
-                } else if self.consume_if_match(b'=')? {
+                } else if self.consume_if_match(b'=') {
                     self.add_token_automatically(token::TokenTypes::PlusEqual)
                 } else {
                     self.add_token_automatically(token::TokenTypes::Plus)
@@ -297,11 +273,11 @@ impl<'a> Lexer<'a> {
             }
 
             b'-' => {
-                if self.consume_if_match(b'-')? {
+                if self.consume_if_match(b'-') {
                     self.add_token_automatically(token::TokenTypes::MinusMinus)
-                } else if self.consume_if_match(b'=')? {
+                } else if self.consume_if_match(b'=') {
                     self.add_token_automatically(token::TokenTypes::MinusEqual)
-                } else if self.consume_if_match(b'>')? {
+                } else if self.consume_if_match(b'>') {
                     self.add_token_automatically(token::TokenTypes::RArrowThin)
                 } else {
                     self.add_token_automatically(token::TokenTypes::Minus)
@@ -309,7 +285,7 @@ impl<'a> Lexer<'a> {
             }
 
             b'*' => {
-                if self.consume_if_match(b'=')? {
+                if self.consume_if_match(b'=') {
                     self.add_token_automatically(token::TokenTypes::AsteriskEqual)
                 } else {
                     self.add_token_automatically(token::TokenTypes::Asterisk)
@@ -317,7 +293,7 @@ impl<'a> Lexer<'a> {
             }
 
             b'/' => {
-                if self.consume_if_match(b'=')? {
+                if self.consume_if_match(b'=') {
                     self.add_token_automatically(token::TokenTypes::SlashEqual)
                 } else {
                     self.add_token_automatically(token::TokenTypes::Slash)
@@ -325,7 +301,7 @@ impl<'a> Lexer<'a> {
             }
 
             b'%' => {
-                if self.consume_if_match(b'=')? {
+                if self.consume_if_match(b'=') {
                     self.add_token_automatically(token::TokenTypes::PercentEqual)
                 } else {
                     self.add_token_automatically(token::TokenTypes::Percent)
@@ -340,25 +316,20 @@ impl<'a> Lexer<'a> {
             b'\r' => {}
 
             b' ' | b'\t' => {
-                while self.peek_index(self.current) == Some(character) {
+                while matches!(self.peek_index(self.current), Some(b' ') | Some(b'\t')) {
                     self.current += 1;
                 }
             }
 
             b'"' => self.handle_string_literal()?,
-            b'\'' => self.handle_character_literal()?,
+            b'\'' => self.handle_char_literal()?,
 
             _ => {
                 if character.is_ascii_alphabetic() || character == b'_' {
-                    while self
-                        .peek()
-                        .is_ok_and(|c| c.is_ascii_alphanumeric() || c == b'_')
-                    {
-                        self.consume()?;
-                    }
+                    self.handle_identifier();
                     self.add_token_automatically(token::TokenTypes::Identifier);
                 } else if character.is_ascii_digit() {
-                    self.handle_number_literal()?;
+                    self.handle_number_literal();
                 } else {
                     self.add_token_automatically(token::TokenTypes::Unknown);
                 }
@@ -368,11 +339,24 @@ impl<'a> Lexer<'a> {
         Ok(())
     }
 
+    fn err_unterminated_string_literal(&self) -> LexerError {
+        LexerError::Source(SourceError::UnterminatedStringLiteral {
+            line: self.line,
+            current: self.current,
+        })
+    }
+
+    fn handle_identifier(&mut self) {
+        while self
+            .peek()
+            .is_ok_and(|c| c.is_ascii_alphanumeric() || c == b'_')
+        {
+            self.consume_unchecked();
+        }
+    }
+
     fn handle_string_literal(&mut self) -> LexerResult<()> {
-        loop {
-            let Some(c) = self.peek_index(self.current) else {
-                break;
-            };
+        while let Ok(c) = self.peek() {
             if c == b'"' {
                 break;
             }
@@ -381,17 +365,14 @@ impl<'a> Lexer<'a> {
                 self.line += 1;
             }
 
-            self.current += 1;
+            self.consume_unchecked();
         }
 
         if self.is_at_end() {
-            return Err(LexerError::Source(SourceError::UnterminatedStringLiteral {
-                line: self.line,
-                current: self.current,
-            }));
+            return Err(self.err_unterminated_string_literal());
         }
 
-        self.consume()?;
+        self.consume_unchecked(); // consume the closing quote
 
         self.add_token_manually(
             token::TokenTypes::CharString,
@@ -403,34 +384,41 @@ impl<'a> Lexer<'a> {
         Ok(())
     }
 
-    fn handle_number_literal(&mut self) -> LexerResult<()> {
+    fn handle_number_literal(&mut self) {
         while self.peek().is_ok_and(|c| c.is_ascii_digit()) {
-            self.consume()?;
+            self.consume_unchecked();
         }
 
-        if !self.is_at_end()
-            && self.peek()? == b'.'
-            && self.peek_next().map_or(false, |c| c.is_ascii_digit())
-        {
-            self.consume()?;
+        if self.peek().is_ok_and(|c| c == b'.') {
+            self.consume_unchecked();
 
             while self.peek().is_ok_and(|c| c.is_ascii_digit()) {
-                self.consume()?;
+                self.consume_unchecked();
             }
 
             self.add_token_automatically(token::TokenTypes::Float);
         } else {
             self.add_token_automatically(token::TokenTypes::Integer);
         }
-
-        Ok(())
     }
 
-    fn handle_character_literal(&mut self) -> LexerResult<()> {
-        if self.peek()? == b'\\' {
-            self.consume()?;
+    fn err_unterminated_char_literal(&self) -> LexerError {
+        LexerError::Source(SourceError::UnterminatedCharLiteral {
+            line: self.line,
+            current: self.current,
+        })
+    }
 
-            let escape_char = self.peek_and_consume()?;
+    fn handle_char_literal(&mut self) -> LexerResult<()> {
+        if self.peek().is_ok_and(|c| c == b'\\') {
+            let escape_char =
+                self.peek_next()
+                    .ok_or(LexerError::Source(SourceError::BadEscapeCharacter {
+                        line: self.line,
+                        current: self.current,
+                    }))?;
+
+            self.consume_unchecked(); // consume the backslash
 
             match escape_char {
                 b'n' | b't' | b'r' | b'\\' | b'\'' | b'"' | b'0' => {}
@@ -441,17 +429,23 @@ impl<'a> Lexer<'a> {
                     }));
                 }
             }
+
+            self.consume_unchecked(); // consume the escape character itself
         } else {
-            self.peek_and_consume()?;
+            if self.is_at_end() {
+                return Err(LexerError::Source(SourceError::BadEscapeCharacter {
+                    line: self.line,
+                    current: self.current,
+                }));
+            }
+
+            self.consume_unchecked();
         }
 
-        if self.peek()? != b'\'' {
-            return Err(LexerError::Source(SourceError::UnterminatedCharLiteral {
-                line: self.line,
-                current: self.current,
-            }));
+        if !self.peek().is_ok_and(|c| c == b'\'') {
+            return Err(self.err_unterminated_char_literal()); // or a new "char literal too long" variant
         }
-        self.consume()?;
+        self.consume_unchecked();
 
         self.add_token_manually(
             token::TokenTypes::Char,
@@ -463,15 +457,16 @@ impl<'a> Lexer<'a> {
         Ok(())
     }
 
-    pub fn lex_text(&mut self) -> TokenList {
+    pub fn lex_text(&mut self) {
         while !self.is_at_end() {
             // set start to the current so the token start is recorded
             self.start = self.current;
 
             match self.scan() {
                 Ok(()) => {}
-                Err(_) => {
-                    // eprintln!("Lexing error: {:?}", err);
+                Err(err) => {
+                    eprintln!("{:?}", err);
+                    return;
                 }
             }
         }
@@ -483,7 +478,9 @@ impl<'a> Lexer<'a> {
             self.current,
             self.line,
         );
+    }
 
+    pub fn take_token(&mut self) -> TokenList {
         // take ownership of tokens
         std::mem::take(&mut self.tokens)
     }

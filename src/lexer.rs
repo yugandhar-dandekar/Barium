@@ -457,17 +457,14 @@ impl<'a> Lexer<'a> {
         Ok(())
     }
 
-    pub fn lex_text(&mut self) {
+    pub fn lex_text(&mut self) -> LexerResult<()> {
         while !self.is_at_end() {
             // set start to the current so the token start is recorded
             self.start = self.current;
 
             match self.scan() {
                 Ok(()) => {}
-                Err(err) => {
-                    eprintln!("{:?}", err);
-                    return;
-                }
+                Err(err) => return Err(err),
             }
         }
 
@@ -478,6 +475,8 @@ impl<'a> Lexer<'a> {
             self.current,
             self.line,
         );
+
+        Ok(())
     }
 
     pub fn take_token(&mut self) -> TokenList {

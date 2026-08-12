@@ -14,11 +14,11 @@ pub enum InternalError {
 
 #[derive(Debug)]
 pub enum SourceError {
-    UnexpectedEOF { line: usize, current: usize },
+    UnexpectedEOF { line: usize, col: usize },
 
-    UnterminatedStringLiteral { line: usize, current: usize },
-    UnterminatedCharLiteral { line: usize, current: usize },
-    BadEscapeCharacter { line: usize, current: usize },
+    UnterminatedStringLiteral { line: usize, col: usize },
+    UnterminatedCharLiteral { line: usize, col: usize },
+    BadEscapeCharacter { line: usize, col: usize },
 }
 
 impl From<InternalError> for LexerError {
@@ -48,6 +48,7 @@ pub struct Lexer<'a> {
     current: usize,
 
     line: usize,
+    col: usize,
 }
 
 impl<'a> Lexer<'a> {
@@ -76,6 +77,7 @@ impl<'a> Lexer<'a> {
 
             current: 0,
             line: 1,
+            col: 1,
         }
     }
 
@@ -124,18 +126,15 @@ impl<'a> Lexer<'a> {
 
     /// Peeks `source` at `current` index
     ///
-    /// returns [`Option<u8>`]
+    /// returns [`LexerResult<u8>`]
     #[must_use]
     fn peek(&self) -> LexerResult<u8> {
-        self.peek_index(self.current).map_or_else(
-            || {
-                Err(LexerError::Internal(InternalError::FailedToIndexSource {
-                    line: self.line,
-                    current: self.current,
-                }))
+        self.peek_index(self.current).ok_or(LexerError::Internal(
+            InternalError::FailedToIndexSource {
+                line: self.line,
+                current: self.current,
             },
-            |c| Ok(c),
-        )
+        ))
     }
 
     /// Peeks `source` at `current + 1` index
@@ -151,6 +150,13 @@ impl<'a> Lexer<'a> {
     #[inline(always)]
     fn consume_unchecked(&mut self) {
         self.current += 1;
+        self.col += 1;
+    }
+
+    #[inline(always)]
+    fn newline(&mut self) {
+        self.line += 1;
+        self.col = 1;
     }
 
     /// Pushes a token to `tokens` with parameters decided automatically
@@ -309,7 +315,7 @@ impl<'a> Lexer<'a> {
             }
 
             b'\n' => {
-                self.line += 1;
+                self.newline();
                 self.add_token_automatically(token::TokenTypes::EndOfLine)
             }
 
@@ -342,7 +348,7 @@ impl<'a> Lexer<'a> {
     fn err_unterminated_string_literal(&self) -> LexerError {
         LexerError::Source(SourceError::UnterminatedStringLiteral {
             line: self.line,
-            current: self.current,
+            col: self.col,
         })
     }
 
@@ -362,7 +368,7 @@ impl<'a> Lexer<'a> {
             }
 
             if c == b'\n' {
-                self.line += 1;
+                self.newline();
             }
 
             self.consume_unchecked();
@@ -402,20 +408,13 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn err_unterminated_char_literal(&self) -> LexerError {
-        LexerError::Source(SourceError::UnterminatedCharLiteral {
-            line: self.line,
-            current: self.current,
-        })
-    }
-
     fn handle_char_literal(&mut self) -> LexerResult<()> {
         if self.peek().is_ok_and(|c| c == b'\\') {
             let escape_char =
                 self.peek_next()
                     .ok_or(LexerError::Source(SourceError::BadEscapeCharacter {
                         line: self.line,
-                        current: self.current,
+                        col: self.col,
                     }))?;
 
             self.consume_unchecked(); // consume the backslash
@@ -425,7 +424,7 @@ impl<'a> Lexer<'a> {
                 _ => {
                     return Err(LexerError::Source(SourceError::BadEscapeCharacter {
                         line: self.line,
-                        current: self.current,
+                        col: self.col,
                     }));
                 }
             }
@@ -435,7 +434,7 @@ impl<'a> Lexer<'a> {
             if self.is_at_end() {
                 return Err(LexerError::Source(SourceError::BadEscapeCharacter {
                     line: self.line,
-                    current: self.current,
+                    col: self.col,
                 }));
             }
 
@@ -443,7 +442,10 @@ impl<'a> Lexer<'a> {
         }
 
         if !self.peek().is_ok_and(|c| c == b'\'') {
-            return Err(self.err_unterminated_char_literal()); // or a new "char literal too long" variant
+            return Err(LexerError::Source(SourceError::UnterminatedCharLiteral {
+                line: self.line,
+                col: self.start + 1,
+            })); // or a new "char literal too long" variant
         }
         self.consume_unchecked();
 

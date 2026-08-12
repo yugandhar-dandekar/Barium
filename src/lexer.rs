@@ -73,7 +73,7 @@ impl<'a> Lexer<'a> {
             source_len,
             // assume less than 4 bytes per token average so estimated capacity
             // is len / 3 at maximum
-            tokens: Vec::with_capacity(source_len / 3),
+            tokens: Vec::with_capacity(source_len / 2),
 
             start: 0,
 

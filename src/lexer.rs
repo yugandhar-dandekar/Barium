@@ -17,8 +17,11 @@ pub enum SourceError {
     UnexpectedEOF { line: usize, col: usize },
 
     UnterminatedStringLiteral { line: usize, col: usize },
+
     UnterminatedCharLiteral { line: usize, col: usize },
-    BadEscapeCharacter { line: usize, col: usize },
+    BadCharLiteral { line: usize, col: usize },
+    EmptyCharLiteral { line: usize, col: usize },
+    BadEscapeCharLiteral { line: usize, col: usize },
 }
 
 impl From<InternalError> for LexerError {
@@ -96,19 +99,9 @@ impl<'a> Lexer<'a> {
     }
 
     #[must_use]
-    fn peek(&self) -> LexerResult<u8> {
-        self.peek_index(self.current).ok_or(LexerError::Internal(
-            InternalError::FailedToIndexSource {
-                line: self.line,
-                current: self.current,
-            },
-        ))
-    }
-
-    #[must_use]
     #[inline(always)]
-    fn peek_next(&self) -> Option<u8> {
-        self.peek_index(self.current + 1)
+    fn peek(&self) -> Option<u8> {
+        self.peek_index(self.current)
     }
 
     /// Unsafe consumption
@@ -143,7 +136,7 @@ impl<'a> Lexer<'a> {
 
     #[inline(always)]
     fn consume_if_match(&mut self, expected: u8) -> bool {
-        if self.peek().is_ok_and(|c| c == expected) {
+        if self.peek().is_some_and(|c| c == expected) {
             self.consume_unchecked();
             true
         } else {
@@ -154,7 +147,12 @@ impl<'a> Lexer<'a> {
     fn scan(&mut self) -> LexerResult<()> {
         // peek the current character, since its already
         // processed, advance automatically
-        let character = self.peek()?;
+        let character =
+            self.peek()
+                .ok_or(LexerError::Internal(InternalError::FailedToIndexSource {
+                    line: self.line,
+                    current: self.current,
+                }))?;
 
         self.consume_unchecked();
 
@@ -304,7 +302,7 @@ impl<'a> Lexer<'a> {
     fn handle_identifier(&mut self) {
         while self
             .peek()
-            .is_ok_and(|c| c.is_ascii_alphanumeric() || c == b'_')
+            .is_some_and(|c| c.is_ascii_alphanumeric() || c == b'_')
         {
             self.consume_unchecked();
         }
@@ -313,7 +311,7 @@ impl<'a> Lexer<'a> {
     }
 
     fn handle_string_literal(&mut self) -> LexerResult<()> {
-        while let Ok(c) = self.peek() {
+        while let Some(c) = self.peek() {
             if c == b'"' {
                 break;
             }
@@ -345,14 +343,14 @@ impl<'a> Lexer<'a> {
     }
 
     fn handle_number_literal(&mut self) {
-        while self.peek().is_ok_and(|c| c.is_ascii_digit()) {
+        while self.peek().is_some_and(|c| c.is_ascii_digit()) {
             self.consume_unchecked();
         }
 
-        if self.peek().is_ok_and(|c| c == b'.') {
+        if self.peek().is_some_and(|c| c == b'.') {
             self.consume_unchecked();
 
-            while self.peek().is_ok_and(|c| c.is_ascii_digit()) {
+            while self.peek().is_some_and(|c| c.is_ascii_digit()) {
                 self.consume_unchecked();
             }
 
@@ -363,44 +361,56 @@ impl<'a> Lexer<'a> {
     }
 
     fn handle_char_literal(&mut self) -> LexerResult<()> {
-        if self.peek().is_ok_and(|c| c == b'\\') {
+        let char = self
+            .peek()
+            .ok_or(LexerError::Source(SourceError::EmptyCharLiteral {
+                line: self.line,
+                col: self.start + 1,
+            }))?;
+
+        // prevent ''
+        if char == b'\'' {
+            return Err(LexerError::Source(SourceError::EmptyCharLiteral {
+                line: self.line,
+                col: self.start + 1,
+            }));
+        } else if char == b'\\' {
+            self.consume_unchecked();
+
             let escape_char =
-                self.peek_next()
-                    .ok_or(LexerError::Source(SourceError::BadEscapeCharacter {
+                self.peek()
+                    .ok_or(LexerError::Source(SourceError::UnterminatedCharLiteral {
                         line: self.line,
                         col: self.start + 1,
                     }))?;
 
-            self.consume_unchecked(); // consume the backslash
-
             match escape_char {
                 b'n' | b't' | b'r' | b'\\' | b'\'' | b'"' | b'0' => {}
                 _ => {
-                    return Err(LexerError::Source(SourceError::BadEscapeCharacter {
+                    return Err(LexerError::Source(SourceError::BadEscapeCharLiteral {
                         line: self.line,
                         col: self.current + 1,
                     }));
                 }
             }
-
-            self.consume_unchecked(); // consume the escape character itself
-        } else {
-            if self.is_at_end() {
-                return Err(LexerError::Source(SourceError::BadEscapeCharacter {
-                    line: self.line,
-                    col: self.current + 1,
-                }));
-            }
-
-            self.consume_unchecked();
         }
 
-        if !self.peek().is_ok_and(|c| c == b'\'') {
+        self.consume_unchecked();
+
+        let terminating_char =
+            self.peek()
+                .ok_or(LexerError::Source(SourceError::UnterminatedCharLiteral {
+                    line: self.line,
+                    col: self.start + 1,
+                }))?;
+
+        if terminating_char != b'\'' {
             return Err(LexerError::Source(SourceError::UnterminatedCharLiteral {
                 line: self.line,
-                col: self.start + 1,
-            })); // or a new "char literal too long" variant
+                col: self.current + 1,
+            }));
         }
+
         self.consume_unchecked();
 
         self.add_token_manually(

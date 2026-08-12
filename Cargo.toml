@@ -7,9 +7,6 @@ keywords = ["lexer", "token"]
 description = "Simple lexer written in Rust"
 readme = "README.md"
 
-[dependencies]
-colored = "3.1.1"
-
 [lib]
 name="barium"
 crate-type = ["rlib"]

@@ -48,7 +48,6 @@ pub struct Lexer<'a> {
     current: usize,
 
     line: usize,
-    col: usize,
 }
 
 impl<'a> Lexer<'a> {
@@ -77,56 +76,25 @@ impl<'a> Lexer<'a> {
 
             current: 0,
             line: 1,
-            col: 1,
         }
     }
 
-    /// Checks if `index` provided is at the end of the file
-    ///
-    /// `index` will have reached the end when `index` == the length of the
-    /// source, this is because the `current` attribute in [`Lexer`] always
-    /// points to the next character being processed which is when it is 1
-    /// more than the index of the last character.
-    ///
-    /// # Examples
-    ///
-    /// ```ignore
-    /// self.source = b"test".into();
-    ///
-    /// // equal to the length of "test" so reached the end
-    /// assert_eq!(self.index_is_at_end(4), true);
-    ///
-    /// // greater than the length of "test" so gone past the end
-    /// assert_eq!(self.index_is_at_end(10), true);
-    ///
-    /// // not reached the end
-    /// assert_eq!(self.index_is_at_end(3), false);
-    /// ```
     #[inline(always)]
     fn index_is_at_end(&self, index: usize) -> bool {
         index >= self.source_len
     }
 
-    /// Checks if `current` attribute in Lexer is at the end
-    ///
-    /// Wrapper method for Lexer::index_is_at_end
     #[inline(always)]
     fn is_at_end(&self) -> bool {
         self.index_is_at_end(self.current)
     }
 
-    /// Peeks `source` at `index`
-    ///
-    /// returns [`Option<u8>`]
     #[must_use]
     #[inline(always)]
     fn peek_index(&self, index: usize) -> Option<u8> {
         self.source.get(index).copied()
     }
 
-    /// Peeks `source` at `current` index
-    ///
-    /// returns [`LexerResult<u8>`]
     #[must_use]
     fn peek(&self) -> LexerResult<u8> {
         self.peek_index(self.current).ok_or(LexerError::Internal(
@@ -137,9 +105,6 @@ impl<'a> Lexer<'a> {
         ))
     }
 
-    /// Peeks `source` at `current + 1` index
-    ///
-    /// returns [`Option<u8>`]
     #[must_use]
     #[inline(always)]
     fn peek_next(&self) -> Option<u8> {
@@ -150,23 +115,17 @@ impl<'a> Lexer<'a> {
     #[inline(always)]
     fn consume_unchecked(&mut self) {
         self.current += 1;
-        self.col += 1;
     }
 
     #[inline(always)]
     fn newline(&mut self) {
         self.line += 1;
-        self.col = 1;
     }
 
-    /// Pushes a token to `tokens` with parameters decided automatically
-    ///
-    /// sets `end` is set to `current`, all other parameters are the same
     fn add_token_automatically(&mut self, token_type: token::TokenTypes) {
         self.add_token_manually(token_type, self.start, self.current, self.line);
     }
 
-    /// Pushes a token to `tokens`
     fn add_token_manually(
         &mut self,
         token_type: token::TokenTypes,
@@ -182,8 +141,6 @@ impl<'a> Lexer<'a> {
         });
     }
 
-    /// If the peeked character is equal to the expected, return true and advance,
-    /// else return false. If the peek fails, return an error
     #[inline(always)]
     fn consume_if_match(&mut self, expected: u8) -> bool {
         if self.peek().is_ok_and(|c| c == expected) {
@@ -333,7 +290,6 @@ impl<'a> Lexer<'a> {
             _ => {
                 if character.is_ascii_alphabetic() || character == b'_' {
                     self.handle_identifier();
-                    self.add_token_automatically(token::TokenTypes::Identifier);
                 } else if character.is_ascii_digit() {
                     self.handle_number_literal();
                 } else {
@@ -345,13 +301,6 @@ impl<'a> Lexer<'a> {
         Ok(())
     }
 
-    fn err_unterminated_string_literal(&self) -> LexerError {
-        LexerError::Source(SourceError::UnterminatedStringLiteral {
-            line: self.line,
-            col: self.col,
-        })
-    }
-
     fn handle_identifier(&mut self) {
         while self
             .peek()
@@ -359,6 +308,8 @@ impl<'a> Lexer<'a> {
         {
             self.consume_unchecked();
         }
+
+        self.add_token_automatically(token::TokenTypes::Identifier);
     }
 
     fn handle_string_literal(&mut self) -> LexerResult<()> {
@@ -375,7 +326,10 @@ impl<'a> Lexer<'a> {
         }
 
         if self.is_at_end() {
-            return Err(self.err_unterminated_string_literal());
+            return Err(LexerError::Source(SourceError::UnterminatedStringLiteral {
+                line: self.line,
+                col: self.start + 1,
+            }));
         }
 
         self.consume_unchecked(); // consume the closing quote
@@ -414,7 +368,7 @@ impl<'a> Lexer<'a> {
                 self.peek_next()
                     .ok_or(LexerError::Source(SourceError::BadEscapeCharacter {
                         line: self.line,
-                        col: self.col,
+                        col: self.start + 1,
                     }))?;
 
             self.consume_unchecked(); // consume the backslash
@@ -424,7 +378,7 @@ impl<'a> Lexer<'a> {
                 _ => {
                     return Err(LexerError::Source(SourceError::BadEscapeCharacter {
                         line: self.line,
-                        col: self.col,
+                        col: self.current + 1,
                     }));
                 }
             }
@@ -434,7 +388,7 @@ impl<'a> Lexer<'a> {
             if self.is_at_end() {
                 return Err(LexerError::Source(SourceError::BadEscapeCharacter {
                     line: self.line,
-                    col: self.col,
+                    col: self.current + 1,
                 }));
             }
 
